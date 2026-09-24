@@ -1,0 +1,12 @@
+numpy>=1.26
+scipy>=1.11
+scikit-image>=0.22
+opencv-python>=4.8
+pandas>=2.0
+matplotlib>=3.7
+flask>=3.0
+statsmodels>=0.14      # multiplicity correction behind the p-values on the plots
+pillow>=10.0
+czifile>=2019.7.2.1
+tifffile>=2023.2.28
+imagecodecs>=2023.1.23

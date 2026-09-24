@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aortic Straightener and Fibrosis Quantifier</title>
+<link rel="stylesheet" href="/static/labkit.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header>
+  <h1 title="Aortic Straightener and Fibrosis Quantifier">ASFQ<small class="brand-by">by Matrix MetalloProteinase</small></h1>
+  <nav id="tabs">
+    <button class="tab active" data-tab="assemble">Assemble</button>
+    <button class="tab" data-tab="aorta">Aorta</button>
+    <button class="tab" data-tab="heart">Heart</button>
+    <button class="tab" data-tab="kidney">Kidney</button>
+    <button class="tab" data-tab="help">How it works</button>
+  </nav>
+  <div id="status">no folder loaded</div>
+</header>
+
+<!-- ===================== ASSEMBLE ===================== -->
+<section id="tab-assemble" class="tabpane active">
+  <aside class="panel">
+    <div class="group">
+      <h3>Source folder</h3>
+      <div class="row">
+        <input id="folder" type="text" placeholder="/path/to/images" spellcheck="false">
+        <button id="btn-browse" class="ghost small" title="Folders, and the images in them">Browse…</button>
+      </div>
+      <div id="browser" class="browser hidden"></div>
+      <button id="btn-load" class="primary wide">Load tiles</button>
+      <div class="hint">Reads .czi, .tif, .png, .jpg. Nothing is modified.</div>
+    </div>
+
+    <div class="group">
+      <h3>Session</h3>
+      <div class="row">
+        <input id="sess-name" type="text" placeholder="name this session" spellcheck="false">
+        <button id="btn-sess-save" class="ghost small" title="Save the whole working state under this name">Save</button>
+      </div>
+      <div class="row">
+        <select id="sess-list"><option value="">no saved sessions</option></select>
+        <button id="btn-sess-open" class="ghost small" title="Clear the tab and restore this session">Open</button>
+        <button id="btn-sess-del" class="ghost small" title="Delete the saved session">Delete</button>
+      </div>
+      <div id="sess-note" class="hint"></div>
+      <div class="hint">Keeps what you decided, not just what you exported: where the tiles ended up,
+        the redirected trace, the marks, the foci you clicked away, every setting on every tab and how
+        the figure is styled. The images and the results are pointed at rather than copied, so a session
+        stays small and re-running into the same folder updates every session that points at it — but
+        moving the source folder is the one thing that breaks it.</div>
+    </div>
+
+    <div class="group">
+      <h3>Automatic assembly</h3>
+      <label class="row"><span>Match resolution</span>
+        <input id="p-coarse" type="number" value="320" min="120" max="900" step="20"></label>
+      <label class="row"><span>Min correlation</span>
+        <input id="p-ncc" type="number" value="0.30" min="0" max="0.95" step="0.05"></label>
+      <label class="row"><span>Min peak ratio</span>
+        <input id="p-pr" type="number" value="1.12" min="1" max="3" step="0.02"></label>
+      <label class="row"><span>Min overlap</span>
+        <input id="p-ov" type="number" value="0.06" min="0.01" max="0.6" step="0.01"></label>
+      <label class="row"><span>Rotation search ±°</span>
+        <input id="p-rot" type="number" value="0" min="0" max="15" step="1"></label>
+      <label class="row"><span>Only compare tiles within</span>
+        <input id="p-win" type="number" value="0" min="0" max="200" step="1"></label>
+      <div class="hint">0 = compare every pair. Set a window only when the file order really does follow the stage.</div>
+      <button id="btn-auto" class="primary wide" disabled>Auto-stitch</button>
+      <button id="btn-resolve" class="wide" disabled title="re-solve keeping the tiles you locked">Re-solve, keep my locks</button>
+    </div>
+
+    <div class="group">
+      <h3>By hand</h3>
+      <div class="hint keys">
+        drag a tile to move it · <b>shift</b>+drag or <b>I</b> to move its whole island ·
+        <b>A</b> align selected · <b>shift+A</b> align everything ·
+        <b>L</b> lock · <b>[</b> <b>]</b> rotate · arrows nudge · <b>F</b> fit ·
+        <b>⌘Z</b>/<b>ctrl+Z</b> undo, <b>⇧⌘Z</b> redo
+      </div>
+      <div class="hint keys">
+        <b>V</b> move · <b>R</b> rectangle · <b>Q</b> lasso · <b>⌘A</b> all · <b>E</b> grow to islands ·
+        <b>Esc</b> back to move and deselect. While a selection tool is active:
+        <b>shift</b> adds, <b>alt</b> subtracts, <b>space</b>+drag still pans.
+      </div>
+      <div class="row toolrow">
+        <button id="tool-move" class="tool on" title="move and select single tiles (V)">✥ Move</button>
+        <button id="tool-rect" class="tool" title="rectangular selection (R)">▭ Rect</button>
+        <button id="tool-lasso" class="tool" title="lasso selection (Q)">◌ Lasso</button>
+      </div>
+      <div class="row">
+        <span id="sel-count" class="selcount">nothing selected</span>
+      </div>
+      <label class="row"><span><input id="chk-enclosed" type="checkbox"> take only fully enclosed tiles</span></label>
+      <div class="row">
+        <button id="btn-selall" title="⌘A">Select all</button>
+        <button id="btn-selnone">Select none</button>
+      </div>
+      <div class="row">
+        <button id="btn-undo" disabled>↶ Undo</button>
+        <button id="btn-redo" disabled>↷ Redo</button>
+      </div>
+      <div class="row">
+        <button id="btn-snap" disabled>Align selected</button>
+        <button id="btn-snapall" disabled>Align all</button>
+      </div>
+      <div class="row">
+        <button id="btn-snapislands" disabled
+                title="After dragging pieces roughly into place: settle every island against the others, each one moving as a whole. The biggest island (or anything locked) stays put.">Settle islands</button>
+        <button id="btn-mergeislands" disabled
+                title="Select a tile in each piece, then merge them into one island where they now sit. Nothing moves — this only overrides the automatic judgement about whether they belong together.">Merge selected islands</button>
+      </div>
+      <label class="row"><span>Search radius (tile fraction)</span>
+        <input id="p-search" type="number" value="0.22" min="0.02" max="0.6" step="0.02"></label>
+      <label class="row"><span><input id="chk-island" type="checkbox"> drag whole island</span></label>
+      <label class="row"><span>See through what you drag</span>
+        <input id="p-ghost" type="range" value="100" min="20" max="100" step="5"></label>
+      <div class="hint" id="ghost-note">Off. Turn this down and whatever you are moving — a tile, or a
+        whole island — is laid over what is under it so both sets of tissue show at once and you can
+        line them up directly. Blank slide stops covering anything; only the stained tissue of each
+        is drawn, so the two walls cross where they agree.</div>
+      <div class="row">
+        <button id="btn-lock">Lock / unlock</button>
+        <button id="btn-fit">Fit view</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Quality</h3>
+      <div id="qc-summary" class="readout">—</div>
+      <div id="suggestions"></div>
+      <button id="btn-suggest" class="wide" disabled>Look for island merges</button>
+    </div>
+
+    <div class="group">
+      <h3>Export</h3>
+      <label class="row"><span>Scale</span>
+        <input id="e-scale" type="number" value="0.5" min="0.02" max="1" step="0.05"></label>
+      <label class="row"><span>Island</span>
+        <select id="e-island"><option value="all">all</option></select></label>
+      <label class="row"><span>Blending</span>
+        <select id="e-mode"><option value="feather">feather</option><option value="darkest">darkest</option></select></label>
+      <input id="e-dir" type="text" placeholder="output folder (default: <source>/stitched)">
+      <button id="btn-export" class="primary wide" disabled>Export mosaic + layout</button>
+      <div class="row">
+        <button id="btn-savelayout" disabled>Save layout</button>
+        <button id="btn-loadlayout" disabled>Load layout</button>
+      </div>
+      <div id="export-out" class="readout small"></div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="overlay-info"></div>
+    </div>
+    <div id="progress" class="progress hidden"><div class="bar"></div><span></span></div>
+  </main>
+</section>
+
+<!-- ===================== WALL ===================== -->
+<section id="tab-aorta" class="tabpane" data-organ="aorta">
+  <aside class="panel">
+    <div class="group">
+      <h3>What to measure</h3>
+      <label class="row"><span><input type="radio" name="wsrc" id="wsrc-sess" checked> stitched session</span></label>
+      <label class="row"><span>Island</span><select id="w-island"><option value="0">0</option></select></label>
+      <label class="row"><span>Render scale</span>
+        <input id="w-render" type="number" value="0.35" min="0.05" max="1" step="0.05"></label>
+      <label class="row"><span><input type="radio" name="wsrc" id="wsrc-file"> image file</span></label>
+      <input id="w-file" type="text" placeholder="/path/to/mosaic.png">
+      <label class="row"><span>µm per pixel</span>
+        <input id="w-px" type="number" value="" step="0.01" placeholder="from file"></label>
+    </div>
+
+    <div class="group">
+      <h3>Wall detection</h3>
+      <label class="row"><span>Analysis µm/px</span>
+        <input id="w-apx" type="number" value="0.5" min="0.1" max="4" step="0.1"></label>
+      <label class="row"><span>Muscle threshold</span>
+        <input id="w-mq" type="number" value="0.55" min="0.1" max="0.95" step="0.05"></label>
+      <label class="row"><span>Centre-line smoothing µm</span>
+        <input id="w-sm" type="number" value="100" min="10" max="500" step="10"></label>
+      <label class="row"><span>Re-centre on mid-wall</span>
+        <input id="w-rec" type="number" value="2" min="0" max="4" step="1"></label>
+      <label class="row"><span>Re-centred smoothing µm</span>
+        <input id="w-recsm" type="number" value="20" min="4" max="200" step="2"></label>
+      <label class="row"><span>Step along wall µm</span>
+        <input id="w-arc" type="number" value="1" min="0.25" max="20" step="0.25"></label>
+      <label class="row"><span>Half-width sampled µm</span>
+        <input id="w-depth" type="number" value="260" min="60" max="900" step="20"></label>
+      <label class="row"><span><input id="chk-exclude" type="checkbox" checked> leave branch junctions out of the totals</span></label>
+      <label class="row"><span>Media ends where</span>
+        <select id="w-edge">
+          <option value="muscle-end">the muscle runs out</option>
+          <option value="collagen-crossing">collagen overtakes muscle</option>
+        </select></label>
+      <div class="hint">The first, the default, sets the edge by where muscle runs out, which
+        collagen cannot move, so a lesion keeps its place inside the wall. The second marks the
+        external elastic lamina on a healthy wall, but it ends the media in the same quantity
+        fibrosis is measured in: a focal patch inside the media ends the media at the patch and
+        is then counted as adventitia, so the more collagen a stretch has, the less of it is
+        counted. The two do not measure the same band — don't mix them within a cohort, and
+        sections measured before this became the default were measured the other way.</div>
+      <label class="row"><span>Blue threshold</span>
+        <input id="w-blue" type="number" value="" step="0.05" placeholder="collagen &gt; muscle"></label>
+      <label class="row"><span>Lesion threshold</span>
+        <input id="w-lesion-k" type="number" value="3" min="0.5" max="8" step="0.5"></label>
+      <label class="row"><span>Smallest lesion µm²</span>
+        <input id="w-lesion-min" type="number" value="2000" min="0" step="500"></label>
+      <div class="hint">A lesion is collagen standing this many robust deviations above
+        <i>this wall's own</i> level. A healthy media returns none at 3, and should: its
+        collagen is lamellar, running through the whole thickness, so the distribution is
+        broad and unimodal with nothing focal in it. The readout says what the cut was and
+        what the wall actually reached, so <b>none</b> is an answer you can check rather
+        than a silence.</div>
+      <div class="hint">Left empty, a pixel counts as fibrotic when its collagen outweighs its
+        muscle — no threshold, and comparable between slides. Enter a number for the classical
+        absolute-threshold index.</div>
+      <div class="hint">Re-centring moves the sampling curve from the lumen outline onto the
+        measured middle of the wall, which is what stops the unrolled image looking squashed at
+        bends. 0 turns it off.</div>
+      <input id="w-name" type="text" placeholder="output name" value="wall">
+      <input id="w-out" type="text" placeholder="output folder">
+      <button id="btn-analyze" class="primary wide">Straighten &amp; measure</button>
+    </div>
+
+    <div class="batch-slot"></div>
+  </aside>
+
+  <main class="stage scroll">
+    <div id="w-progress" class="progress hidden"><div class="bar"></div><span></span></div>
+    <div id="w-vessels" class="row hidden" style="gap:6px;margin-bottom:8px"></div>
+    <div id="w-editor" class="editor hidden">
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+        <b>Redirect or cut the outline</b>
+        <span class="hint" style="margin:0">Drag along the wall to redraw a stretch. The
+          drawing only has to be roughly right — it is pulled onto the middle of the media
+          before anything is measured. Switch the tool to <b>cut the ends back</b> and click
+          where the wall should stop, for a trace that runs on into a branch or the next
+          vessel.</span>
+      </div>
+      <canvas id="w-canvas"></canvas>
+      <div class="row" style="gap:6px;margin-top:6px;align-items:center">
+        <label class="inline small">Tool
+          <select id="w-tool">
+            <option value="outline">redraw the outline</option>
+            <option value="trim">cut the ends back</option>
+            <option value="point">mark lesions</option>
+            <option value="reject">remove a focus</option>
+          </select></label>
+        <button id="btn-outline-undo" class="ghost small">Undo</button>
+        <button id="btn-outline-reset" class="ghost small">Reset</button>
+        <button id="btn-w-clearpts" class="ghost small">Clear marks</button>
+        <button id="btn-w-restore" class="ghost small">Restore removed foci</button>
+        <button id="btn-outline-add" class="ghost small"
+                title="Keep this outline and start another, for a second vessel in the same section. Each outline is measured as its own wall.">Add another vessel</button>
+        <label class="inline small"><input id="w-outline-closed" type="checkbox"> closed ring</label>
+        <span id="w-outline-note" class="hint" style="margin:0"></span>
+        <span class="grow"></span>
+        <button id="btn-outline-run" class="primary small">Re-measure with this outline</button>
+      </div>
+    </div>
+    <div id="w-figstyle" class="editor hidden">
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+        <b>Figure style</b>
+        <span class="hint" style="margin:0">Restyles the analysis figure below in place -- the
+          same PNG and SVG a run saves, redrawn from the same numbers. Rotate the section to
+          whatever orientation reads best, size it for where it's going, and set the type scale,
+          boxes and gridlines.</span>
+      </div>
+      <div class="row" style="gap:14px;flex-wrap:wrap;align-items:center">
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center">Rotate stitched image
+          <input id="fs-rotation" type="number" value="0" step="1"></label>
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center">Row height (in)
+          <input id="fs-rowh" type="number" value="1.7" min="0.5" step="0.1"></label>
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center">Left width (in)
+          <input id="fs-leftw" type="number" value="9" min="1" step="0.5"></label>
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center">Right width (in)
+          <input id="fs-rightw" type="number" value="2.5" min="0.5" step="0.5"></label>
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center">Font size (pt)
+          <input id="fs-font" type="number" value="10.5" min="6" max="24" step="0.5"></label>
+        <label style="flex:0 0 auto;display:flex;gap:5px;align-items:center"
+               title="Display levels, one per stain, for the picture panels only. The section is separated into its stains, each is scaled by its own number, and the picture is put back together — so turning the red down leaves the blue exactly as it was, which is what makes it usable for scoring by eye. No number in any table is affected: everything measured comes from the concentrations before any of this.">Levels
+          <span class="pair">
+            <label><span class="dim">red</span>
+              <input id="fs-gain-red" type="number" value="1" min="0" max="2" step="0.05"></label>
+            <label><span class="dim">blue</span>
+              <input id="fs-gain-blue" type="number" value="1" min="0" max="2" step="0.05"></label>
+            <label><span class="dim">nuc</span>
+              <input id="fs-gain-nuc" type="number" value="1" min="0" max="2" step="0.05"></label>
+          </span></label>
+        <label class="inline small"><input id="fs-trace" type="checkbox" checked> wall trace</label>
+        <label class="inline small"><input id="fs-grid" type="checkbox" checked> gridlines</label>
+        <label class="inline small"><input id="fs-spines" type="checkbox" checked> plot boxes</label>
+        <span class="grow"></span>
+        <span id="fs-status" class="hint" style="margin:0"></span>
+        <button id="btn-fs-reset" class="ghost small">Reset</button>
+      </div>
+    </div>
+    <div id="w-numbers" class="editor hidden">
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
+        <b>Numbers</b>
+        <span class="hint" style="margin:0">Everything the run measured. Hover a row for what
+          it means.</span>
+      </div>
+      <div id="w-totals" class="readout">—</div>
+      <div id="w-files" class="readout small"></div>
+    </div>
+    <div id="w-summary"></div>
+    <div class="batch-stage"></div>
+  </main>
+</section>
+
+<!-- ===================== HEART / KIDNEY =====================
+     Two organs, one analysis: there is no wall to straighten in either, so
+     both are the area measurement and both panes are built from the same
+     template in app.js.  Written once rather than twice so heart and kidney
+     cannot quietly drift apart. -->
+<section id="tab-heart" class="tabpane" data-organ="heart">
+  <aside class="panel"><div class="organ-slot"></div><div class="batch-slot"></div></aside>
+  <main class="stage scroll"><div class="organ-stage"></div><div class="batch-stage"></div></main>
+</section>
+
+<section id="tab-kidney" class="tabpane" data-organ="kidney">
+  <aside class="panel"><div class="organ-slot"></div><div class="batch-slot"></div></aside>
+  <main class="stage scroll"><div class="organ-stage"></div><div class="batch-stage"></div></main>
+</section>
+
+<!-- ===================== HELP ===================== -->
+<section id="tab-help" class="tabpane">
+  <main class="stage scroll doc">
+    <h2>How the assembler decides where a tile goes</h2>
+    <p>Every pair of tiles is scored at every possible offset at once, using masked
+    normalised cross-correlation evaluated by FFT. The signal being correlated is
+    <em>optical density</em>, high-pass filtered: blank slide has an optical density of
+    zero, so empty background contributes nothing, and uneven illumination between
+    snapshots is removed before matching rather than after.</p>
+
+    <p>A placement is believed only if three independent things agree:</p>
+    <ul>
+      <li><b>correlation</b> — how well the shared tissue matches;</li>
+      <li><b>peak ratio</b> — how much better the winning offset is than the best offset
+      far away from it. Two tiles overlapping along a long featureless structure produce
+      a correlation <em>ridge</em> rather than a peak, and the ratio stays near 1. That is
+      the assembler telling you it does not know, which is worth more than a confident
+      wrong answer;</li>
+      <li><b>overlapping tissue area</b> — a correlation over forty pixels can reach 1.0 by
+      accident.</li>
+    </ul>
+
+    <h2>Why tiles get left out</h2>
+    <p>Tiles are added one at a time, and before each one is accepted it is checked against
+    <em>every</em> tile already placed that it would overlap — not just the one that
+    proposed it. Two tiles claiming the same piece of slide must agree about what is
+    there. If they do not, the placement is refused and the tile waits for a better
+    offer, or is parked to the right of the mosaic for you to place by hand.</p>
+    <p>This is the whole reason a spanning-tree layout can look finished and be wrong: it
+    uses one match per tile and never notices that following the chain around a loop has
+    dropped one piece of specimen on top of another.</p>
+    <p>On the canvas every tile is outlined by how well it agrees with its neighbours:
+    <b>grey</b> means nothing to look at, <b>rust</b> is middling, <b>red</b> is a tile
+    contradicting a neighbour, with a red line drawn to the tile it disagrees with. A
+    <b>white</b> outline means you have it selected, and a dashed one means it is locked.</p>
+
+    <h2>Drag, then align</h2>
+    <p>You supply the topology — which piece belongs roughly where, the part software gets
+    wrong on self-similar tissue. Correlation then supplies the last few pixels, the part
+    people get wrong. Press <b>A</b> after dragging: the tile is re-matched against its
+    new neighbours within a small radius of where you put it, so your decision is refined,
+    never overruled. Lock a tile (<b>L</b>) and nothing will move it again.</p>
+
+    <h2>Selecting several pieces at once</h2>
+    <p>Three tools share the canvas. <b>Move</b> (<b>V</b>) drags a tile or, with shift, its
+    whole island. <b>Rect</b> (<b>R</b>) drags out a rectangle and takes every tile it touches.
+    <b>Lasso</b> (<b>Q</b>) draws a freehand loop and takes every tile whose centre or corner
+    falls inside it — a lasso is normally thrown round a cluster rather than traced along tile
+    edges, so demanding full enclosure would catch nothing when the pieces are bigger than the
+    gesture. Tick <em>take only fully enclosed tiles</em> when you do mean exactly the pieces
+    inside the line.</p>
+    <p>While a selection tool is active, <b>shift</b> adds to the selection and <b>alt</b>
+    subtracts, so a rough sweep can be corrected rather than redrawn. Pressing on a tile that
+    is <em>already</em> selected drags the selection instead of starting a new region, so
+    marquee-then-move needs no mode switch in between; <b>space</b>+drag pans whatever tool is
+    active. <b>E</b> grows the selection to every tile in the islands it already touches, which
+    is the quick way to grab a whole parked fragment.</p>
+    <p>Everything that acts on a selection acts on all of it: <b>A</b> aligns each selected
+    tile against its neighbours, <b>L</b> locks or unlocks them together, the arrow keys nudge
+    them together, and dragging any one of them moves the set.</p>
+
+    <p><b>⌘Z</b> (or <b>ctrl+Z</b>) undoes any change to the layout, and <b>⇧⌘Z</b> redoes it —
+    drags, nudges, rotations, locks, alignments, an applied merge, and auto-stitch itself, up
+    to eighty steps back. Only the layout is recorded: undo puts the pieces back where they
+    were and leaves your view, selection and settings alone. Repeated nudges in quick
+    succession collapse into one step so a held arrow key does not bury the history.</p>
+
+    <h2>From sections to genotypes</h2>
+    <p>The <b>Batch</b> tab takes a <em>tray</em>: one parent folder, one sub-folder per
+    section. Scanning it reads each folder name for mouse, genotype, age, segment, slide
+    and section, and says how many folders it could not read before anything runs. A
+    <b>metadata.csv</b> beside them overrides the parser, so a mis-read never has to be
+    fixed by renaming data.</p>
+    <p>Slices of one segment in one mouse are pooled by <em>adding the integrals</em> —
+    total collagen over total muscle, total media area over total wall length. Averaging
+    the section ratios instead would weight a short off-cut the same as a whole ring.</p>
+    <p>The plots put a <em>dot on every animal</em> over the group bars. With three or four
+    mice a side, a bar and an error bar cannot tell you whether a difference is four animals
+    agreeing or one animal carrying the group, and that is what a reader needs to see. Ask
+    for a dot per <em>section</em> and the figure says so in red: sections within an animal
+    are repeated measures, and a bar drawn over them is not an n. <b>p</b> is printed as a
+    number rather than as stars — at these group sizes 0.04 and 0.06 are the same result.</p>
+    <p>Genotypes are compared across <em>per-mouse</em> values. Sections and slides are
+    repeated measures of one animal, so treating them as independent inflates n and shrinks
+    p for reasons that have nothing to do with the biology. The tables print
+    <b>n_mice</b> beside <b>n_sections</b> so the two can never be confused.</p>
+
+    <h2>What the wall analysis measures</h2>
+    <p>Stains are separated into <em>concentrations</em> by colour deconvolution. Optical
+    density is linear in dye, so concentration can legitimately be integrated over
+    distance; a hue-and-saturation score cannot, because it confounds how much dye there
+    is with how dark the field was.</p>
+    <ul>
+      <li><b>collagen per unit length</b> — the collagen concentration integrated through
+      the wall thickness at each position, in OD·µm. It is comparable between vessels of
+      different size, but it is <em>not</em> a fibrosis index: it integrates through the
+      wall, so a thicker wall gives more of everything. On these sections it tracks media
+      thickness at r = +0.97.</li>
+      <li><b>collagen ÷ muscle</b> — the same quantity divided by muscle integrated through
+      the same wall, so thickness cancels. This is the readout to quote. The bottom panel of
+      the figure plots it position by position with the running value over it — collagen so
+      far over muscle so far — which settles on the whole-wall ratio, so a drift away from
+      that line is a real gradient along the vessel rather than a thick patch.</li>
+      <li><b>blue area fraction in the media</b> — the fraction of the muscle layer where
+      collagen outweighs muscle. This asks a question with no free parameter, which matters:
+      collagen inside the media is unimodal, so an automatic threshold has nothing to lock onto.
+      On one section, a change that moved the collagen percentiles by under 0.02 moved Otsu from
+      0.778 to 0.632 and the reported fibrosis from 9 % to 34 %. A threshold derived per section
+      also makes sections incomparable, since a more fibrotic section earns a higher threshold
+      that cancels part of the difference being measured.</li>
+    </ul>
+    <p>The media runs from the luminal surface to where collagen overtakes muscle and stays
+    ahead — the external elastic lamina. The crossover has to hold for several microns, so
+    a fibrotic patch <em>inside</em> the media does not truncate the measurement of itself.</p>
+  </main>
+</section>
+
+<script src="/static/labkit.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
