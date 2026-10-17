@@ -88,11 +88,11 @@ Three numbers come out of it, and it is worth being precise about what each one 
 
 | readout | units | what it answers |
 |---|---|---|
-| `collagen_od_um2_per_mm_length` | OD·µm² / mm | how much collagen there is **per millimetre of wall**, so vessels of different size compare |
+| `collagen_od_um2_per_mm_length` | OD·µm² / mm | how much collagen there is **per millimeter of wall**, so vessels of different size compare |
 | `cum_collagen_od_um2` along the wall | OD·µm² | *where* the collagen is: a straight cumulative line means diffuse, steps mean focal |
 | `collagen_area_fraction_media` | fraction | proportion of the muscle layer where collagen outweighs muscle — no threshold to choose |
 
-Everything is measured on **stain concentrations** obtained by colour deconvolution, not on
+Everything is measured on **stain concentrations** obtained by color deconvolution, not on
 hue or saturation. Optical density is linear in dye amount (Beer–Lambert), so it can be
 integrated over distance; a hue score cannot, because it confounds how much dye is present
 with how dark the field happened to be.
@@ -158,7 +158,7 @@ for d in sections:
 cells.append(md(r"""
 ## 1. Assemble one section
 
-`auto_stitch` scores every pair of fields with masked normalised cross-correlation
+`auto_stitch` scores every pair of fields with masked normalized cross-correlation
 evaluated by FFT, then adds tiles one at a time, refusing any placement that contradicts
 one already made. Tiles it cannot place consistently are parked as separate *islands*
 rather than forced in — check `island_sizes` before trusting the result, and open the
@@ -191,15 +191,15 @@ cells.append(md(r"""
 
 `layout_qc` re-scores every pair of tiles that ends up overlapping, at the offset the
 finished layout implies — including pairs that were never matched to each other. A tile
-whose neighbours disagree with it is the thing to look at. Hand-checked correct overlaps on
-this material score 0.45–0.94 here; contradictions score below 0.2, so there is no grey zone
+whose neighbors disagree with it is the thing to look at. Hand-checked correct overlaps on
+this material score 0.45–0.94 here; contradictions score below 0.2, so there is no gray zone
 to interpret.
 """))
 
 cells.append(code(r"""
 qc = SC.layout_qc(ts, poses)
-print(f"median agreement with neighbours : {qc.score.median():.3f}")
-print(f"tiles contradicting a neighbour  : {int(qc.n_conflicts.sum())}")
+print(f"median agreement with neighbors : {qc.score.median():.3f}")
+print(f"tiles contradicting a neighbor  : {int(qc.n_conflicts.sum())}")
 print(qc.groupby("island").agg(tiles=("index", "size"), median_score=("score", "median")).to_string())
 
 worst = qc.sort_values("score").head(5)[["file", "score", "n_neighbours", "n_conflicts", "island"]]
@@ -230,7 +230,7 @@ gives a closed reference curve, and the image is resampled onto (distance along 
 **local** — the maximum of the media's distance transform along each normal, which is the
 middle of the wall at that point; one number for the whole section ties every point to the
 thickest muscle anywhere in the mask, and on a branched section that is the junction, where
-two walls have merged. It is then **re-centred on the measured middle of the wall** and the
+two walls have merged. It is then **re-centered on the measured middle of the wall** and the
 wall sampled again, aiming at the peak of the muscle profile wherever the wall edges cannot
 be found — a target that survives the curve being wrong, so a curve that slips off can climb
 back rather than staying off and being counted as wall anyway.
@@ -254,7 +254,7 @@ no hold length repairs it: it defines the edge of the media **in the same quanti
 measured in**. A focal patch inside the media ends the media at the patch, the patch is then
 counted as adventitia, and the wall is reported thin — so the more collagen a stretch has, the
 less of it is counted. On one thoracic section here, at a patch where collagen ÷ muscle
-reaches 1.25 against the vessel's own 0.64, the edge lands 15 µm into a media whose neighbours
+reaches 1.25 against the vessel's own 0.64, the edge lands 15 µm into a media whose neighbors
 are 31 µm thick.
 
 **`muscle-end`**, the default, ends the media where the muscle runs out: the first sustained fall of muscle
@@ -324,8 +324,8 @@ print(f"unrolling stretch inside the media: {res.totals['stretch_p1']:.2f} to "
 cells.append(md(r"""
 ### One figure, one horizontal scale
 
-The map at the top carries the traced wall, coloured by distance along it and dotted at whole
-millimetres, so a feature in any panel below can be found again on the vessel. Everything under
+The map at the top carries the traced wall, colored by distance along it and dotted at whole
+millimeters, so a feature in any panel below can be found again on the vessel. Everything under
 the map shares the same *distance along the wall* axis: a step in the cumulative curve lines up
 with the patch of wall that caused it.
 
@@ -358,7 +358,7 @@ no image behind them, and wherever the traced path turns over. That last one mat
 branch the path comes out on the other wall, so the lumen is then on the opposite side, and
 deciding the orientation once for the whole vessel leaves everything after the junction inside
 out. Orientation is decided per position instead, and the cuts are drawn as hard vertical
-lines because the two sides of a cut are not neighbours on the vessel.
+lines because the two sides of a cut are not neighbors on the vessel.
 
 Shaded stretches are where the band is too thick to be a wall — **orange** where the wall
 actually forks, **red** where it is thick without forking, which is what a diseased wall would
@@ -392,7 +392,7 @@ factor `1 - κd` at depth `d`. Two consequences are handled rather than ignored:
   counted more than it should be;
 * where the factor goes to zero the sampling lines have crossed and the same tissue would be
   read twice — those samples are dropped, and `folded_fraction` reports how many there were.
-  After the sampling curve is re-centred on the middle of the wall it is normally zero.
+  After the sampling curve is re-centered on the middle of the wall it is normally zero.
 """))
 
 cells.append(md(r"""
@@ -404,7 +404,7 @@ grow just because the wall is thicker there in the trivial sense of counting mor
 it is the amount of dye in a one-micron-wide slice through the wall.
 
 Summing that along the vessel gives the cumulative curve. Its *slope* is the local density
-and its final value divided by wall length is the per-millimetre figure that compares
+and its final value divided by wall length is the per-millimeter figure that compares
 across animals.
 
 Three siblings come off the same integral and are worth not confusing. `muscle_od_um_per_um_length`
@@ -467,7 +467,7 @@ Two complementary measures of the same thing, both restricted to the media:
   not saturate, and it is what changes when fibrosis deepens rather than spreads.
 
 The area fraction deliberately has **no threshold in it**. Collagen inside the media is
-unimodal, so an automatically chosen threshold has nothing to lock onto: re-centring the
+unimodal, so an automatically chosen threshold has nothing to lock onto: re-centering the
 sampling curve on one of these sections moved the collagen percentiles by less than 0.02 and
 moved Otsu from 0.778 to 0.632 — taking the reported fibrosis from 9 % to 34 %. A per-section
 threshold is also wrong in principle, because a more fibrotic section earns a higher threshold
@@ -539,7 +539,7 @@ plt.show()
 """))
 
 cells.append(md(r"""
-### Normalise collagen to muscle
+### Normalize collagen to muscle
 
 `collagen_od_um2_per_mm_length` is not a fibrosis index. It tracks media thickness at
 **r = +0.97** here, and muscle per unit length at +0.98 — arithmetic, not biology, since
@@ -547,7 +547,7 @@ integrating a concentration through a thicker wall gives more of everything.
 
 Dividing collagen by muscle cancels it: both are integrated through the same thickness.
 `collagen_to_muscle_ratio` drops to r = −0.42 to −0.78 against thickness, and the sign flip
-is the tell — a units artefact would have stayed positive.
+is the tell — a units artifact would have stayed positive.
 
 What is left is a real negative relationship of varying strength: where the media is thicker
 it is proportionally less collagenous, clearly so in the thoracic sections (−0.71, −0.78)
@@ -792,7 +792,7 @@ and their pieces taken out of the running, so a ring broken by a fold stays one 
 
 This matters on exactly the sections where it is easiest to miss. One arch caught at a
 branch holds two walls, neither of which closes; the band is two pieces of 395,000 and
-141,000 µm². Enumerating lumina alone finds none, so the whole band was skeletonised as one
+141,000 µm². Enumerating lumina alone finds none, so the whole band was skeletonized as one
 and the longest path won — and it was the *smaller* vessel that won it, because that walk
 starts from whichever skeleton endpoint the raster reaches first. The section reported one
 2.9 mm wall. It now reports two, of 3.7 and 2.9 mm.
@@ -805,14 +805,14 @@ those are reported by `find_branch_nodes` as attachment points on the parent ins
 
 When the automatic answer is wrong, `analyze_wall(..., guide_um=...)` takes an outline drawn
 by hand, in microns from the top-left of the image; the **Vessel wall** tab has an editor for
-drawing it. It does not have to be accurate — the re-centring pass pulls a rough line onto
+drawing it. It does not have to be accurate — the re-centering pass pulls a rough line onto
 the middle of the media exactly as it does the automatic one.
 
 The editor cuts as well as redraws, and the two answer different questions. Redrawing a
 stretch fixes a trace that went the wrong way. Cutting the ends fixes one that went the right
 way and then kept going — into the junction two limbs of an arch share, or off along the
 vessel next to it. There is nothing to redirect there: the wall stops, and where it stops is
-a judgement about the specimen. Cutting is the same mechanism, since a shorter `guide_um` is
+a judgment about the specimen. Cutting is the same mechanism, since a shorter `guide_um` is
 just a shorter wall; on the arch section above it takes vessel 1 from 4.645 mm traced to
 3.435, and from four branch nodes to one.
 
@@ -820,9 +820,9 @@ An outline belongs to **one** wall, and the section's other walls are still foun
 way while it is edited — the app sends their ranks alongside the outline and the server
 measures them automatically, so they come back identical to the run they came from. They are
 deliberately *not* re-measured from the outlines already on screen: a curve does not survive
-a round trip through the re-centring untouched. Feeding vessel 2's own trace straight back
+a round trip through the re-centering untouched. Feeding vessel 2's own trace straight back
 moves its traced length by 5 % and its blue area by a quarter, so a vessel nobody touched
-would drift every time its neighbour was redrawn.
+would drift every time its neighbor was redrawn.
 
 Each vessel's own row records the bookkeeping: `n_vessels` found in that section, of which
 `n_lumina` were found by an enclosed hole and `n_lumina_rejected` holes were turned down,
@@ -1037,7 +1037,7 @@ claim about a genotype, and each is somewhere a result can be quietly lost:
   those two tables.
 
   The figure is two panels per group, muscle and collagen, rather than one carrying both:
-  four curves in two different meanings of colour is not a figure anyone reads. Written as
+  four curves in two different meanings of color is not a figure anyone reads. Written as
   `cohort_depth_relative.csv`, `cohort_depth_plot.png` and `.svg`.
 """))
 
@@ -1079,10 +1079,11 @@ cells.append(code(r"""
 # of mice the dots are the figure: a bar cannot say whether a difference is every
 # animal agreeing or one animal carrying the group.
 fig = CO.plot_cohort(tables, unit="mouse_segment", error="sd",
+                     by="genotype",   # or "age" / "mouse" -- what the bars are
                      title=DATA.name)
 fig.savefig(OUT / "cohort_plot.png", dpi=150, bbox_inches="tight")
-with plt.rc_context({"svg.fonttype": "none"}):
-    fig.savefig(OUT / "cohort_plot.svg", bbox_inches="tight")   # vector, text still text
+with plt.rc_context({"pdf.fonttype": 42}):
+    fig.savefig(OUT / "cohort_plot.pdf", bbox_inches="tight")   # vector, text still text
 plt.show()
 """))
 
@@ -1106,8 +1107,8 @@ else:
     # plotting area itself at 2 x 2 in, whatever the labels around it need.
     fig = CO.plot_depth_profiles(depth_avg, title=DATA.name)
     fig.savefig(OUT / "cohort_depth_plot.png", dpi=150, bbox_inches="tight")
-    with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(OUT / "cohort_depth_plot.svg", bbox_inches="tight")
+    with plt.rc_context({"pdf.fonttype": 42}):
+        fig.savefig(OUT / "cohort_depth_plot.pdf", bbox_inches="tight")
     plt.show()
 """))
 

@@ -111,7 +111,7 @@
         <button id="btn-snapislands" disabled
                 title="After dragging pieces roughly into place: settle every island against the others, each one moving as a whole. The biggest island (or anything locked) stays put.">Settle islands</button>
         <button id="btn-mergeislands" disabled
-                title="Select a tile in each piece, then merge them into one island where they now sit. Nothing moves — this only overrides the automatic judgement about whether they belong together.">Merge selected islands</button>
+                title="Select a tile in each piece, then merge them into one island where they now sit. Nothing moves — this only overrides the automatic judgment about whether they belong together.">Merge selected islands</button>
       </div>
       <label class="row"><span>Search radius (tile fraction)</span>
         <input id="p-search" type="number" value="0.22" min="0.02" max="0.6" step="0.02"></label>
@@ -183,11 +183,11 @@
         <input id="w-apx" type="number" value="0.5" min="0.1" max="4" step="0.1"></label>
       <label class="row"><span>Muscle threshold</span>
         <input id="w-mq" type="number" value="0.55" min="0.1" max="0.95" step="0.05"></label>
-      <label class="row"><span>Centre-line smoothing µm</span>
+      <label class="row"><span>Center-line smoothing µm</span>
         <input id="w-sm" type="number" value="100" min="10" max="500" step="10"></label>
-      <label class="row"><span>Re-centre on mid-wall</span>
+      <label class="row"><span>Re-center on mid-wall</span>
         <input id="w-rec" type="number" value="2" min="0" max="4" step="1"></label>
-      <label class="row"><span>Re-centred smoothing µm</span>
+      <label class="row"><span>Re-centered smoothing µm</span>
         <input id="w-recsm" type="number" value="20" min="4" max="200" step="2"></label>
       <label class="row"><span>Step along wall µm</span>
         <input id="w-arc" type="number" value="1" min="0.25" max="20" step="0.25"></label>
@@ -221,7 +221,7 @@
       <div class="hint">Left empty, a pixel counts as fibrotic when its collagen outweighs its
         muscle — no threshold, and comparable between slides. Enter a number for the classical
         absolute-threshold index.</div>
-      <div class="hint">Re-centring moves the sampling curve from the lumen outline onto the
+      <div class="hint">Re-centering moves the sampling curve from the lumen outline onto the
         measured middle of the wall, which is what stops the unrolled image looking squashed at
         bends. 0 turns it off.</div>
       <input id="w-name" type="text" placeholder="output name" value="wall">
@@ -336,7 +336,7 @@
   <main class="stage scroll doc">
     <h2>How the assembler decides where a tile goes</h2>
     <p>Every pair of tiles is scored at every possible offset at once, using masked
-    normalised cross-correlation evaluated by FFT. The signal being correlated is
+    normalized cross-correlation evaluated by FFT. The signal being correlated is
     <em>optical density</em>, high-pass filtered: blank slide has an optical density of
     zero, so empty background contributes nothing, and uneven illumination between
     snapshots is removed before matching rather than after.</p>
@@ -362,22 +362,22 @@
     <p>This is the whole reason a spanning-tree layout can look finished and be wrong: it
     uses one match per tile and never notices that following the chain around a loop has
     dropped one piece of specimen on top of another.</p>
-    <p>On the canvas every tile is outlined by how well it agrees with its neighbours:
-    <b>grey</b> means nothing to look at, <b>rust</b> is middling, <b>red</b> is a tile
-    contradicting a neighbour, with a red line drawn to the tile it disagrees with. A
+    <p>On the canvas every tile is outlined by how well it agrees with its neighbors:
+    <b>gray</b> means nothing to look at, <b>rust</b> is middling, <b>red</b> is a tile
+    contradicting a neighbor, with a red line drawn to the tile it disagrees with. A
     <b>white</b> outline means you have it selected, and a dashed one means it is locked.</p>
 
     <h2>Drag, then align</h2>
     <p>You supply the topology — which piece belongs roughly where, the part software gets
     wrong on self-similar tissue. Correlation then supplies the last few pixels, the part
     people get wrong. Press <b>A</b> after dragging: the tile is re-matched against its
-    new neighbours within a small radius of where you put it, so your decision is refined,
+    new neighbors within a small radius of where you put it, so your decision is refined,
     never overruled. Lock a tile (<b>L</b>) and nothing will move it again.</p>
 
     <h2>Selecting several pieces at once</h2>
     <p>Three tools share the canvas. <b>Move</b> (<b>V</b>) drags a tile or, with shift, its
     whole island. <b>Rect</b> (<b>R</b>) drags out a rectangle and takes every tile it touches.
-    <b>Lasso</b> (<b>Q</b>) draws a freehand loop and takes every tile whose centre or corner
+    <b>Lasso</b> (<b>Q</b>) draws a freehand loop and takes every tile whose center or corner
     falls inside it — a lasso is normally thrown round a cluster rather than traced along tile
     edges, so demanding full enclosure would catch nothing when the pieces are bigger than the
     gesture. Tick <em>take only fully enclosed tiles</em> when you do mean exactly the pieces
@@ -389,7 +389,7 @@
     active. <b>E</b> grows the selection to every tile in the islands it already touches, which
     is the quick way to grab a whole parked fragment.</p>
     <p>Everything that acts on a selection acts on all of it: <b>A</b> aligns each selected
-    tile against its neighbours, <b>L</b> locks or unlocks them together, the arrow keys nudge
+    tile against its neighbors, <b>L</b> locks or unlocks them together, the arrow keys nudge
     them together, and dragging any one of them moves the set.</p>
 
     <p><b>⌘Z</b> (or <b>ctrl+Z</b>) undoes any change to the layout, and <b>⇧⌘Z</b> redoes it —
@@ -419,7 +419,7 @@
     <b>n_mice</b> beside <b>n_sections</b> so the two can never be confused.</p>
 
     <h2>What the wall analysis measures</h2>
-    <p>Stains are separated into <em>concentrations</em> by colour deconvolution. Optical
+    <p>Stains are separated into <em>concentrations</em> by color deconvolution. Optical
     density is linear in dye, so concentration can legitimately be integrated over
     distance; a hue-and-saturation score cannot, because it confounds how much dye there
     is with how dark the field was.</p>

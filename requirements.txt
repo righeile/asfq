@@ -1,12 +1,15 @@
-numpy>=1.26
-scipy>=1.11
-scikit-image>=0.22
-opencv-python>=4.8
-pandas>=2.0
-matplotlib>=3.7
-flask>=3.0
-statsmodels>=0.14      # multiplicity correction behind the p-values on the plots
-pillow>=10.0
-czifile>=2019.7.2.1
-tifffile>=2023.2.28
-imagecodecs>=2023.1.23
+# Upper bounds are the majors that are known to break this code, not caution:
+# see ../requirements-apps.txt, which is the environment these apps actually
+# run in (one shared .venv, symlinked as .venv in each app).
+numpy>=1.26,<3
+scipy>=1.11,<2
+scikit-image>=0.22,<0.28
+opencv-python>=4.8,<6
+pandas>=2.0,<4
+matplotlib>=3.7,<4
+flask>=3.0,<4
+statsmodels>=0.14,<1      # multiplicity correction behind the p-values on the plots
+pillow>=10.0,<13
+czifile>=2026.8.16     # this app works with either -- see ../requirements-apps.txt
+tifffile>=2026.9.20
+imagecodecs>=2026.8.16

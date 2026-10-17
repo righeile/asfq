@@ -225,7 +225,7 @@ def health():
 # let the front end move to the shared browser without the endpoint changing
 # shape underneath it.
 app.register_blueprint(LKB.flask_blueprint())
-# Colours by genotype, saved under ~/.labkit and shared with the other tools:
+# Colors by genotype, saved under ~/.labkit and shared with the other tools:
 # "the KO is this red" is a decision about a paper, and a paper's panels come
 # out of more than one of these programs.
 app.register_blueprint(LKSC.flask_blueprint())
@@ -485,7 +485,7 @@ def session_merge_islands(sid: str):
     """
     Declare that these islands are one piece, leaving every tile where it is.
 
-    The automatic merge is a judgement -- `snap_island` joins an island only
+    The automatic merge is a judgment -- `snap_island` joins an island only
     when the result contradicts nothing, and the suggestion panel offers a
     shift it worked out itself.  Neither can help when the evidence is
     genuinely ambiguous and you can nonetheless see where the piece goes.
@@ -782,10 +782,10 @@ def analyze():
     guides = [g for g in guides if g.get("um")]
     # The vessels the editor is *not* touching.  They are re-detected rather
     # than re-drawn from the outlines already on screen: a curve does not
-    # survive a round trip through the re-centring untouched -- feeding one
+    # survive a round trip through the re-centering untouched -- feeding one
     # straight back moved its traced length by 5-11 % and its blue area by a
     # quarter -- so an untouched vessel would silently change its numbers every
-    # time its neighbour was edited.  Running it again automatically is the
+    # time its neighbor was edited.  Running it again automatically is the
     # same call that produced it, so it comes back identical.
     keep_ranks = sorted({int(k) for k in (body.get("keep_ranks") or [])})
     # Marks placed by hand, in the same microns as a drawn outline, and the two
@@ -821,7 +821,7 @@ def analyze():
             px_um = float(body.get("px_um") or px or 1.0)
             title = path.name
 
-        progress(0.15, "analysing the wall")
+        progress(0.15, "analyzing the wall")
         # Every vessel the section encloses, not just the biggest: a section
         # that catches the aorta twice has two walls in it, and measuring one
         # and silently dropping the other is how half a section goes missing.
@@ -903,7 +903,7 @@ def analyze():
             "points": _jsonable(r_i.points),
             "paths": {k: str(v) for k, v in p_i.items()},
             "rectangular_channels_png": str(p_i["rectangular_channels"]),
-            "rectangular_channels_svg": str(p_i["rectangular_channels_svg"]),
+            "rectangular_channels_pdf": str(p_i["rectangular_channels_pdf"]),
             "straight_png": str(p_i["straightened"]),
             "outline": _outline_for_editor(r_i, p_i),
         } for r_i, p_i, rank in out]
@@ -917,7 +917,7 @@ def analyze():
             "straight_png": str(paths["straightened"]),
             "rectangular_png": str(paths["rectangular"]),
             "rectangular_channels_png": str(paths["rectangular_channels"]),
-            "rectangular_channels_svg": str(paths["rectangular_channels_svg"]),
+            "rectangular_channels_pdf": str(paths["rectangular_channels_pdf"]),
             "vessels": vessels,
             "lumina": _jsonable(getattr(res, "lumina", []) or []),
             "outline": _outline_for_editor(res, paths),
@@ -989,10 +989,10 @@ def replot():
                                organ=entry.get("organ", ""), **kw)
         fig.savefig(p, dpi=130, bbox_inches="tight")
         plt.close(fig)
-        with plt.rc_context({"svg.fonttype": "none"}):
+        with plt.rc_context({"pdf.fonttype": 42}):
             fig = FB.plot_fibrosis(entry["fib"], title=entry.get("title", ""),
                                    organ=entry.get("organ", ""), svg=True, **kw)
-            fig.savefig(p.with_suffix(".svg"), bbox_inches="tight")
+            fig.savefig(p.with_suffix(".pdf"), bbox_inches="tight")
             plt.close(fig)
         return jsonify({"ok": True})
 
@@ -1011,12 +1011,12 @@ def replot():
     fig = WA.plot_rectangular(entry["res"], overview_rgb=entry["overview_rgb"], **kw)
     fig.savefig(p, dpi=130, bbox_inches="tight")
     plt.close(fig)
-    # See save_results for why the SVG is a separate render rather than a
-    # second savefig of the same figure.
-    fig_svg = WA.plot_rectangular(entry["res"], overview_rgb=entry["overview_rgb"], svg=True, **kw)
-    with plt.rc_context({"svg.fonttype": "none"}):
-        fig_svg.savefig(p.with_suffix(".svg"), bbox_inches="tight")
-    plt.close(fig_svg)
+    # See save_results for why the vector pass is a separate render rather
+    # than a second savefig of the same figure.
+    fig_vec = WA.plot_rectangular(entry["res"], overview_rgb=entry["overview_rgb"], svg=True, **kw)
+    with plt.rc_context({"pdf.fonttype": 42}):
+        fig_vec.savefig(p.with_suffix(".pdf"), bbox_inches="tight")
+    plt.close(fig_vec)
     return jsonify({"ok": True})
 
 
@@ -1139,11 +1139,15 @@ def cohort_plot():
     # on it -- arrives as the shared PlotSpec, so the panel of controls here is
     # the panel of controls in the other tools.
     spec = PlotSpec.from_dict(body.get("spec") or {})
+    # What the bars are.  Genotype unless the cohort spans something else worth
+    # splitting on -- see CO.group_options, which is what the panel offers.
+    group_by = str(body.get("group_by") or "genotype")
     try:
         paths = CO.save_cohort_plot(
             tables, out_dir, name="cohort",
             readouts=body.get("readouts") or list(CO.scheme_for(organ).readouts),
             unit=str(body.get("unit") or "mouse_segment"),
+            by=group_by,
             spec=spec,
             title=str(body.get("title") or ""),
             # The grid, sized a panel at a time.  This figure is the one that
@@ -1164,7 +1168,7 @@ def cohort_plot():
     if "depth_relative" in tables:
         try:
             paths.update({f"depth_{k}": v for k, v in CO.save_depth_plot(
-                tables["depth_relative"], out_dir, spec=spec,
+                tables["depth_relative"], out_dir, spec=spec, by=group_by,
                 title=str(body.get("title") or ""),
                 counterstain=FB.counterstain_name(organ),
                 stains_together=bool(body.get("stains_together")),
@@ -1176,9 +1180,11 @@ def cohort_plot():
             paths["depth_source_csv"] = str(out_dir / "cohort_depth_relative.csv")
         except ValueError:
             pass
-    # The genotypes that were actually drawn, so the panel can offer a colour
-    # box per genotype without guessing at names the figure does not carry.
-    paths["groups"] = CO.genotypes_in(tables, str(body.get("unit") or "mouse_segment"))
+    # What the figure could be split on and what it just drew, so the panel can
+    # offer a color box per group without guessing at names the figure does
+    # not carry -- and so a field the table lost falls back the same way here.
+    paths.update(CO.group_options(
+        tables, str(body.get("unit") or "mouse_segment"), group_by))
     return jsonify(paths)
 
 
@@ -1279,7 +1285,7 @@ def fibrosis_one():
                     if res.lesion_labels is not None else []),
                 "points": _jsonable(res.points),
                 "paths": {k: str(v) for k, v in paths.items()},
-                "figure_png": paths["figure"], "figure_svg": paths["figure_svg"],
+                "figure_png": paths["figure"], "figure_pdf": paths["figure_pdf"],
                 "overview": paths["overview"],
                 "overview_px_um": float(paths["overview_px_um"]),
                 "stains": _jsonable(np.asarray(res.stain_matrix).tolist())}
@@ -1292,7 +1298,7 @@ def zones_suggest():
     """
     A texture guide for the corticomedullary axis, and a first guess at zones.
 
-    Two things with very different standing, returned together and labelled as
+    Two things with very different standing, returned together and labeled as
     such.  The *guide* asserts no boundary -- it is the texture gradient drawn
     as a picture, and it is monotonic across a whole kidney section (coherence
     0.41 at the papilla falling to 0.22 at the cortex).  The *polygons* are a
@@ -1459,7 +1465,7 @@ def fibrosis_batch():
 
 @app.route("/api/batch", methods=["POST"])
 def batch():
-    """Stitch and (optionally) analyse a list of folders without supervision."""
+    """Stitch and (optionally) analyze a list of folders without supervision."""
     body = request.json or {}
     folders = [Path(str(f)).expanduser() for f in (body.get("folders") or [])]
     # "Point me at the tray": a parent folder stands in for its sub-folders.

@@ -1,11 +1,17 @@
 """Figures in the lab's publication style.
 
-The house style: 2x2 inch panels, Arial, 7/8/9 pt, no top or right spine,
+The house style, taken from the lab's own ephys module
+(``working_stuff/Processing Scripts/voltage_clamp_processing.py``): a value
+axis 1.2 in long and 0.25 in to a category (:data:`AXES_LENGTH_MM`,
+:attr:`PlotSpec.bar_mm`), Arial, 7/8/9 pt, no top or right spine,
 transparent background, and ``svg.fonttype='none'`` so every label is still
 live text in Illustrator.  It is *opt-in*: importing this module leaves
 ``matplotlib.rcParams`` alone, because changing them at import would silently
 restyle every unrelated plot in the same notebook session.  Use
 :func:`publication_style` around the figures that want it.
+
+:data:`VECTOR_TEXT` is the one exception, and it *is* applied at import --
+see the note on it.
 
 On top of that sit the three figures these tools actually produce:
 
@@ -35,6 +41,7 @@ and the thing all three can carry:
 from __future__ import annotations
 
 import contextlib
+import inspect
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -52,36 +59,174 @@ __all__ = [
     "add_scale_bars", "save_figure", "hide_axes",
     "annotate_p", "group_plot", "xy_plot", "trace_plot",
     "PlotSpec", "figure_from_spec", "comparisons_for", "annotate_from_spec",
-    "PALETTES",
-    "MM", "jitter",
+    "PALETTES", "FONTS", "VECTOR_TEXT", "TIGHT_CROP",
+    "MM", "jitter", "AXES_LENGTH_MM", "BOX_LW",
+    "series_names", "order_series", "reorder_data",
 ]
 
 SMALL, MEDIUM, LARGE = 7, 8, 9
 
-#: One millimetre, in the inches matplotlib measures figures in.  Figure widths
+#: How much of one category a bar, box or violin fills.  Named because
+#: :func:`figure_from_spec` sizes the panel from it when ``PlotSpec.bar_mm``
+#: asks for a bar of a given printed width: the two have to be the same number
+#: or the bar comes out the wrong size, silently and by a constant factor.
+BAR_WIDTH = 0.62
+
+#: Every line of a box -- edge, whiskers, caps, median.  One weight, which is
+#: what seaborn's ``linewidth=0.7`` gives the lab notebook's boxes.
+BOX_LW = 0.7
+
+#: How long the value axis is, in mm -- the data area's height on an upright
+#: plot, its width on a turned one.  A bar's height is read against its
+#: neighbours and against the next panel, so it has to be the same length on
+#: the page whatever the figure is.  Stretched to the figure instead, a plot of
+#: two groups and a plot of seven carry two y scales and nothing says so.
+#:
+#: 30.48 mm is 1.2 in, the number the lab's own ephys notebook draws at
+#: (``figsize=(0.25*18, 1.2)`` in ``ClC-7 2025.ipynb``, via
+#: ``working_stuff/Processing Scripts/voltage_clamp_processing.py``).  Set on
+#: the figures rather than derived.  ``PlotSpec.panel_height_mm`` is the step
+#: family's panel and keeps its own 38.1 -- a sweep of fourteen voltage steps
+#: is not a bar chart and does not read short.
+#:
+#: ``PlotSpec.axes_height_mm``/``axes_width_mm`` override it.  The *category*
+#: axis is never pinned from here -- ``bar_mm`` sizes that one.
+AXES_LENGTH_MM = 30.48
+
+#: How to ask matplotlib's boxplot and violinplot to lie on their side.
+#: ``vert=False`` was deprecated in 3.11 for ``orientation='horizontal'``,
+#: which only exists from 3.10, and these apps ask for ``matplotlib>=3.7`` --
+#: so read which one this matplotlib has, once, rather than at every call.
+_SIDEWAYS: dict = (
+    {"orientation": "horizontal"}
+    if "orientation" in inspect.signature(plt.Axes.boxplot).parameters
+    else {"vert": False}
+)
+
+
+def _is_horizontal(spec) -> bool:
+    """Whether a spec turns its panel on its side.
+
+    ``'xy'`` and ``'trace'`` have no categories to turn, so they never do.
+    """
+    return bool(getattr(spec, "horizontal", False)) and spec.kind not in ("xy", "trace")
+
+
+#: One millimeter, in the inches matplotlib measures figures in.  Figure widths
 #: are specified in mm here because journals specify them in mm.
 MM = 1.0 / 25.4
 
 
+#: How text is written into a vector file.  These three are applied globally,
+#: at import, which nothing else here does, because they are the only settings
+#: in this module that are not style: they change how a letter is *encoded* in
+#: an .svg or .pdf, never how the figure looks.
+#:
+#: They have to be global because matplotlib reads them when the file is
+#: *written*, not when the artists are made -- unlike a font size, which each
+#: Text bakes in as it is created.  So a figure drawn inside
+#: :func:`publication_style` and saved after the block, which is what every one
+#: of these apps does, was saved under matplotlib's default ``'path'``: every
+#: label came out as outlines, the file had no ``<text>`` in it at all, and
+#: nobody could tell, because outlined letters look exactly like letters until
+#: someone opens the figure to change one.
+#:
+#: 42 is TrueType.  The default, Type 3, is rejected outright by most journals.
+VECTOR_TEXT: dict = {
+    "svg.fonttype": "none",
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+}
+mpl.rcParams.update(VECTOR_TEXT)
+
+
+#: How much white is left round a figure, and how the crop is made to agree
+#: with the size that was asked for.
+#:
+#: Global for exactly the reason :data:`VECTOR_TEXT` is: ``savefig.*`` is read
+#: when the file is *written*, and every one of these apps writes it outside
+#: the style block, so the value sitting in :data:`PUBLICATION_RCPARAMS` never
+#: reached a single saved file.  They all got matplotlib's default 0.1 inch,
+#: which put three millimeters of margin round a figure asked for at a
+#: journal's column width: 89 mm went out as 92.  Production scales that back
+#: to the column, and the 7 pt type checked against the journal's minimum
+#: arrives at 6.8 pt.
+#:
+#: **The two numbers have to be equal.**  Constrained layout reserves ``w_pad``
+#: of blank round the labels; saving with ``bbox_inches='tight'`` crops that
+#: blank off and then adds ``pad_inches`` back.  Equal, they cancel and the
+#: file is the figure size exactly -- 89 mm asked, 89.00 mm written, at every
+#: width and every set of labels.  Unequal, every figure is out by twice the
+#: difference: matplotlib's own defaults are 0.0417 against 0.1, which is
+#: where the three millimeters came from.
+#:
+#: 0.02 in is half a millimeter, which is the tight end of sensible.  Not
+#: zero, because a tight bbox is measured from text extents and clips the odd
+#: descender or tick end.
+TIGHT_CROP: dict = {
+    "savefig.pad_inches": 0.02,
+    "figure.constrained_layout.w_pad": 0.02,
+    "figure.constrained_layout.h_pad": 0.02,
+}
+mpl.rcParams.update(TIGHT_CROP)
+
+
+#: The fonts a figure may be set in.  Arial is the default because it is what
+#: the journals ask for -- Nature, Cell and the physiology journals all name
+#: Arial or Helvetica, and a figure submitted in anything else is a figure
+#: somebody re-sets.  PT Sans is here because it is what the interfaces are
+#: drawn in, so a figure going into a talk or a poster beside them can match;
+#: PT Mono is for the figure whose labels are sequences, well numbers or
+#: filenames, where a fixed width is the reason.  The whole stack is written
+#: into an exported SVG by ``svg.fonttype='none'``, so the fallbacks are what
+#: a collaborator without the first font actually gets.
+FONTS: dict[str, list[str]] = {
+    "arial":   ["Arial", "Helvetica", "DejaVu Sans"],
+    "pt-sans": ["PT Sans", "Arial", "Helvetica", "DejaVu Sans"],
+    "pt-mono": ["PT Mono", "DejaVu Sans Mono", "monospace"],
+}
+
+
 #: The lab's conventions, as an explicit dict rather than an import-time global.
 PUBLICATION_RCPARAMS: dict = {
-    "lines.linewidth": 0.5,
+    "lines.linewidth": 0.2,
     "lines.markersize": 1,
     "lines.color": theme.PRINT["ink"],
     "axes.prop_cycle": mpl.cycler(color=theme.SERIES),
-    "font.family": ["Arial", "Helvetica", "DejaVu Sans"],
+    "font.family": FONTS["arial"],
     "axes.spines.right": False,
     "axes.spines.top": False,
     "axes.edgecolor": theme.PRINT["ink"],
     "axes.labelcolor": theme.PRINT["ink"],
     "axes.grid": False,
+
+    # Tight furniture.  matplotlib's gaps are sized for a six-inch figure on a
+    # screen; on an 85 mm column they cost more width than some of the data.
+    # `titlepad` is the lab notebook's 10 rather than the 3 that was here: a
+    # panel title in these figures is a label standing above the plot, not a
+    # caption sitting on it.
     "axes.titlepad": 10,
+    "axes.labelpad": 2,
+    "xtick.major.pad": 2,
+    "ytick.major.pad": 2,
+
+    # Line weights inside what the journals ask for: Nature 0.25-1 pt, Cell
+    # 0.5-1.5, JGP 0.5-1.  matplotlib's 0.8 default sits at the top of all
+    # three, and a frame heavier than the trace inside it is backwards.
+    "axes.linewidth": 0.5,
+    "xtick.major.width": 0.5,
+    "ytick.major.width": 0.5,
+    "xtick.minor.width": 0.4,
+    "ytick.minor.width": 0.4,
     "legend.loc": "best",
     "legend.frameon": False,
     "legend.handletextpad": 0.5,
     "legend.labelspacing": 0.3,
     "legend.handlelength": 1.0,
     "legend.handleheight": 0.5,
+    "legend.borderpad": 0.3,
+    "legend.borderaxespad": 0.3,
+    "legend.columnspacing": 1.0,
     "legend.labelcolor": theme.PRINT["ink"],
     "legend.markerscale": 1,
     "legend.scatterpoints": 1,
@@ -95,10 +240,9 @@ PUBLICATION_RCPARAMS: dict = {
     "ytick.major.size": 2,
     "xtick.bottom": True,
     "ytick.left": True,
-    # Keep text as text in vector output so figures stay editable.
-    "svg.fonttype": "none",
-    "pdf.fonttype": 42,
-    "ps.fonttype": 42,
+    # Kept here too, so the dict is a complete description of the style.
+    **VECTOR_TEXT,
+    **TIGHT_CROP,
     "font.size": SMALL,
     "axes.titlesize": MEDIUM,
     "axes.labelsize": MEDIUM,
@@ -118,17 +262,21 @@ def use_publication_style() -> None:
 
 
 @contextlib.contextmanager
-def publication_style(font_pt: float | None = None, **overrides):
+def publication_style(font_pt: float | None = None, font: str | None = None,
+                      **overrides):
     """Apply the publication style for the duration of the block only.
 
     >>> with publication_style(figure__figsize=(3, 2)):
     ...     fig, ax = plt.subplots()
 
     ``font_pt`` scales the whole 7/8/9 ladder at once, which is what the size
-    control in every app's plot panel is wired to.  Other keys may use dotted
-    rcParam names or double underscores.
+    control in every app's plot panel is wired to.  ``font`` names a key of
+    :data:`FONTS`.  Other keys may use dotted rcParam names or double
+    underscores.
     """
     params = dict(PUBLICATION_RCPARAMS)
+    if font:
+        params["font.family"] = FONTS.get(str(font).lower(), FONTS["arial"])
     if font_pt:
         scale = float(font_pt) / MEDIUM
         params.update({
@@ -155,7 +303,7 @@ def hide_axes(ax) -> None:
 # ==========================================================================
 
 def _span_of(ax, label, positions: dict) -> float | None:
-    """x position of a group label, tolerating int/str mismatches."""
+    """Position of a group label on its own axis, tolerating int/str mismatches."""
     if label in positions:
         return float(positions[label])
     text = str(label)
@@ -165,37 +313,48 @@ def _span_of(ax, label, positions: dict) -> float | None:
     return None
 
 
-def _data_ceiling(ax, x_low: float, x_high: float) -> float:
-    """The highest thing already drawn between two x positions, in data units.
+def _data_ceiling(ax, low: float, high: float, horizontal: bool = False) -> float:
+    """The furthest thing already drawn between two group positions, in data units.
 
-    Scanned off the artists rather than taken from ``ax.get_ylim()`` so a
-    bracket clears the *data* and not just the axes box -- with a generous
-    y-limit those are very different heights, and a bracket floating a third of
-    the panel above the tallest bar looks like a mistake.
+    "Furthest" is up on an ordinary panel and to the right on a horizontal one:
+    the categories and the values swap axes together, so one index pair runs
+    both rather than a second copy of the scan.
+
+    Scanned off the artists rather than taken from the limits so a bracket
+    clears the *data* and not just the axes box -- with a generous limit those
+    are very different heights, and a bracket floating a third of the panel
+    above the tallest bar looks like a mistake.
 
     Bars, points, error bars, scatter and violins are all covered because the
     group figure can be drawn as any of them.
     """
+    cat, val = (1, 0) if horizontal else (0, 1)
     pad = 1e-9
-    x_low, x_high = min(x_low, x_high) - pad, max(x_low, x_high) + pad
+    low, high = min(low, high) - pad, max(low, high) + pad
     top = -np.inf
 
     for patch in ax.patches:                       # bars
         try:
-            x0, width = patch.get_x(), patch.get_width()
-            height = patch.get_y() + patch.get_height()
+            box = (patch.get_x(), patch.get_width(),
+                   patch.get_y(), patch.get_height())
         except AttributeError:
             continue
-        if x0 + width >= x_low and x0 <= x_high and np.isfinite(height):
-            top = max(top, height)
+        # A bar sits on the category axis and reaches along the value one; barh
+        # swaps which pair of the four is which.
+        near, thick = (box[2], box[3]) if horizontal else (box[0], box[1])
+        far = (box[0] + box[1]) if horizontal else (box[2] + box[3])
+        if near + thick >= low and near <= high and np.isfinite(far):
+            top = max(top, far)
 
     for line in ax.lines:                          # points, error-bar caps, joins
-        xs, ys = np.asarray(line.get_xdata(), float), np.asarray(line.get_ydata(), float)
-        if xs.size == 0 or xs.size != ys.size:
+        data = (np.asarray(line.get_xdata(), float),
+                np.asarray(line.get_ydata(), float))
+        cats, vals = data[cat], data[val]
+        if cats.size == 0 or cats.size != vals.size:
             continue
-        inside = (xs >= x_low) & (xs <= x_high) & np.isfinite(ys)
+        inside = (cats >= low) & (cats <= high) & np.isfinite(vals)
         if inside.any():
-            top = max(top, float(np.max(ys[inside])))
+            top = max(top, float(np.max(vals[inside])))
 
     for collection in ax.collections:              # scatter, violin bodies, fills
         try:
@@ -203,21 +362,21 @@ def _data_ceiling(ax, x_low: float, x_high: float) -> float:
         except Exception:
             offsets = np.empty((0, 2))
         if offsets.ndim == 2 and offsets.shape[0]:
-            inside = ((offsets[:, 0] >= x_low) & (offsets[:, 0] <= x_high)
-                      & np.isfinite(offsets[:, 1]))
+            inside = ((offsets[:, cat] >= low) & (offsets[:, cat] <= high)
+                      & np.isfinite(offsets[:, val]))
             if inside.any():
-                top = max(top, float(np.max(offsets[inside, 1])))
+                top = max(top, float(np.max(offsets[inside, val])))
         for path in getattr(collection, "get_paths", lambda: [])():
             vertices = path.vertices
             if vertices.size == 0:
                 continue
-            inside = ((vertices[:, 0] >= x_low) & (vertices[:, 0] <= x_high)
-                      & np.isfinite(vertices[:, 1]))
+            inside = ((vertices[:, cat] >= low) & (vertices[:, cat] <= high)
+                      & np.isfinite(vertices[:, val]))
             if inside.any():
-                top = max(top, float(np.max(vertices[inside, 1])))
+                top = max(top, float(np.max(vertices[inside, val])))
 
     if not np.isfinite(top):
-        top = float(ax.get_ylim()[1])
+        top = float((ax.get_xlim() if horizontal else ax.get_ylim())[1])
     return top
 
 
@@ -239,6 +398,7 @@ def annotate_p(
     dim_ns: bool = True,
     align: str = "stagger",
     headroom: float = 0.04,
+    horizontal: bool | None = None,
 ) -> list[dict]:
     """Draw significance brackets over the groups they compare.
 
@@ -257,6 +417,11 @@ def annotate_p(
         ``'stagger'`` starts each bracket just above the data it spans, which
         is compact.  ``'level'`` puts every bracket at the same base height,
         which reads more evenly when the groups are of similar size.
+    ``horizontal``
+        Categories down the y axis, brackets reaching right instead of up.
+        Left ``None`` it is read back off the axes, which :func:`group_plot`
+        marks -- so a caller that passes the table it always passed gets
+        brackets the right way round without knowing about this argument.
 
     Brackets are stacked: a bracket is raised until it sits above every bracket
     it overlaps, so a three-group figure with all three pairs annotated comes
@@ -268,6 +433,20 @@ def annotate_p(
     at, so a caller can put something else beside them.
     """
     from .stats import brackets as _brackets, format_p
+
+    if horizontal is None:
+        horizontal = getattr(ax, "_labkit_horizontal", False)
+    horizontal = bool(horizontal)
+    # A horizontal panel is the same picture turned a quarter turn: the
+    # categories run down y and the ladder climbs along x.  One flag through
+    # the whole function rather than a second copy of it -- ``_pair`` puts a
+    # (category, value) pair the way round this panel draws them, and
+    # ``value`` names the axis the brackets are stacked along.
+    value = "x" if horizontal else "y"
+    along = 0 if horizontal else 1
+
+    def _pair(category, magnitude):
+        return (magnitude, category) if horizontal else (category, magnitude)
 
     # --- normalize the input to a list of dicts ---------------------------
     if comparisons is None:
@@ -295,11 +474,13 @@ def annotate_p(
     if not items:
         return []
 
-    # --- where each group sits on the x axis ------------------------------
+    # --- where each group sits on its own axis ----------------------------
     if positions is None:
+        ticks = ax.get_yticks() if horizontal else ax.get_xticks()
+        texts = ax.get_yticklabels() if horizontal else ax.get_xticklabels()
         positions = {
             text.get_text(): tick
-            for tick, text in zip(ax.get_xticks(), ax.get_xticklabels())
+            for tick, text in zip(ticks, texts)
             if text.get_text()
         }
     placeable = []
@@ -327,17 +508,17 @@ def annotate_p(
     to_axes = ax.transData + ax.transAxes.inverted()
     from_axes = ax.transAxes + ax.transData.inverted()
 
-    def _axes_y(y_data: float) -> float:
-        return float(to_axes.transform((0.0, y_data))[1])
+    def _axes_y(magnitude: float) -> float:
+        return float(to_axes.transform(_pair(0.0, magnitude))[along])
 
-    def _data_y(y_axes: float) -> float:
-        return float(from_axes.transform((0.0, y_axes))[1])
+    def _data_y(fraction: float) -> float:
+        return float(from_axes.transform(_pair(0.0, fraction))[along])
 
     # Every ceiling is measured before the first bracket exists.  Measuring as
     # we go would let each bracket see the one below it as data and raise
     # itself off that, so the ladder would climb twice as fast as it needs to.
     ceilings = {
-        id(entry): _axes_y(_data_ceiling(ax, entry["x1"], entry["x2"]))
+        id(entry): _axes_y(_data_ceiling(ax, entry["x1"], entry["x2"], horizontal))
         for entry in placeable
     }
     common_base = max(ceilings.values()) if align == "level" else 0.0
@@ -372,10 +553,11 @@ def annotate_p(
     ]
     ceiling_data = _data_y(highest + headroom)
 
-    low, high = ax.get_ylim()
+    low, high = getattr(ax, f"get_{value}lim")()
     inverted = high < low
     if highest + headroom > 1.0:
-        ax.set_ylim(ceiling_data, high) if inverted else ax.set_ylim(low, ceiling_data)
+        getattr(ax, f"set_{value}lim")(
+            *((ceiling_data, high) if inverted else (low, ceiling_data)))
 
     drawn: list[dict] = []
     for entry, y, tip_y, text_y in resolved:
@@ -383,16 +565,17 @@ def annotate_p(
         line_colour = theme.PRINT["muted"] if faded else colour
 
         ax.plot(
-            [entry["x1"], entry["x1"], entry["x2"], entry["x2"]],
-            [tip_y, y, y, tip_y],
+            *_pair([entry["x1"], entry["x1"], entry["x2"], entry["x2"]],
+                   [tip_y, y, y, tip_y]),
             clip_on=False, zorder=10,
             lw=linewidth, color=line_colour, solid_capstyle="butt",
         )
         if entry["text"]:
             ax.text(
-                (entry["x1"] + entry["x2"]) / 2.0, text_y, entry["text"],
+                *_pair((entry["x1"] + entry["x2"]) / 2.0, text_y), entry["text"],
                 clip_on=False, zorder=10,
-                ha="center", va="bottom", color=line_colour,
+                ha="left" if horizontal else "center",
+                va="center" if horizontal else "bottom", color=line_colour,
                 fontsize=fontsize * (0.92 if faded else 1.0),
             )
         drawn.append({**entry, "y": y})
@@ -479,11 +662,12 @@ def group_plot(
     xlabel: str = "",
     title: str = "",
     order: Sequence[str] | None = None,
-    bar_width: float = 0.62,
-    point_size: float = 3.2,
+    bar_width: float = BAR_WIDTH,
+    point_size: float = 2.5,
     show_n: bool = True,
     log_y: bool = False,
     zero_line: bool = True,
+    horizontal: bool = False,
     seed: int = 0,
 ):
     """Groups side by side, with every data point on top of them.
@@ -501,6 +685,13 @@ def group_plot(
         ``{label: unit ids}`` parallel to ``groups``.  Given, the same unit is
         joined by a thin line across the groups, which is the whole argument
         for a paired test made visible.
+    ``horizontal``
+        The same panel turned a quarter turn: groups down the y axis, bars
+        reaching right, first group at the top.  ``ylabel`` follows the values
+        round to the x axis and ``xlabel`` follows the groups to the y one, so
+        a panel keeps its labels when it is turned.  It is what long group
+        names want -- ``R201C`` and ``rescue`` have a whole column to
+        themselves instead of 6.35 mm of tick.
 
     Returns ``(ax, positions)`` -- the positions being ``{label: x}``, ready to
     hand to :func:`annotate_p`.
@@ -530,6 +721,15 @@ def group_plot(
 
     if ax is None:
         _, ax = plt.subplots()
+    # Marked on the axes so :func:`annotate_p` can read it back: a caller that
+    # passes the table it has always passed gets its brackets turned too.
+    ax._labkit_horizontal = bool(horizontal)
+    cat, val = ("y", "x") if horizontal else ("x", "y")
+
+    def _pair(category, magnitude):
+        """A (category, value) pair, the way round this panel draws them."""
+        return (magnitude, category) if horizontal else (category, magnitude)
+
     colours = list(palette) if palette else theme.SERIES
     positions = {label: float(i) for i, label in enumerate(levels)}
 
@@ -546,43 +746,63 @@ def group_plot(
         err = _error_of(values, error)
 
         if kind == "bar":
-            ax.bar(x, height, width=bar_width, color=colour, alpha=0.75,
-                   edgecolor=colour, linewidth=0.8, zorder=2)
+            (ax.barh if horizontal else ax.bar)(
+                x, height, **{("height" if horizontal else "width"): bar_width},
+                color=colour, alpha=0.75, edgecolor=colour, linewidth=0.8,
+                zorder=2)
             if err:
-                ax.errorbar(x, height, yerr=err, fmt="none", capsize=2.5,
+                ax.errorbar(*_pair(x, height), **{f"{val}err": err},
+                            fmt="none", capsize=2.5,
                             elinewidth=0.9, capthick=0.9,
                             ecolor=theme.PRINT["ink"], zorder=4)
         elif kind == "box":
+            # Black, like every other box in these apps (`PlotStyle.box_edge_colour`
+            # in pHerret, which is where the house style was settled).  A box is
+            # line art and line art is black; the series colour lives on the
+            # points drawn on top, which is the only place it has to be read.
+            # Drawn in the colour instead, the same data gives a different
+            # picture depending on which app drew it -- and two such panels end
+            # up side by side in one figure.
+            ink = theme.PRINT["ink"]
             box = ax.boxplot([values], positions=[x], widths=bar_width,
+                             **(_SIDEWAYS if horizontal else {}),
                              patch_artist=True, showfliers=False, zorder=2,
-                             medianprops={"color": theme.PRINT["ink"], "lw": 1.0},
-                             whiskerprops={"color": colour, "lw": 0.8},
-                             capprops={"color": colour, "lw": 0.8})
+                             medianprops={"color": ink, "lw": BOX_LW},
+                             whiskerprops={"color": ink, "lw": BOX_LW},
+                             capprops={"color": ink, "lw": BOX_LW})
             for patch in box["boxes"]:
                 # Outline only.  A filled box competes with the points drawn on
                 # top of it for the same ink, and the points are the reason the
                 # figure exists -- with three or four animals a side, what the
                 # reader needs to see is where each one fell, not a tinted
                 # rectangle in front of them.
-                patch.set(facecolor="none", edgecolor=colour, linewidth=0.9)
+                patch.set(facecolor="none", edgecolor=ink, linewidth=BOX_LW)
         elif kind == "violin":
             if values.size >= 3 and np.ptp(values) > 0:
                 parts = ax.violinplot([values], positions=[x], widths=bar_width,
+                                      **(_SIDEWAYS if horizontal else {}),
                                       showextrema=False, showmedians=False)
                 for body in parts["bodies"]:
                     body.set(facecolor=colour, alpha=0.30, edgecolor=colour, linewidth=0.8)
-            ax.plot([x - bar_width / 3, x + bar_width / 3], [height] * 2,
+            ax.plot(*_pair([x - bar_width / 3, x + bar_width / 3], [height] * 2),
                     color=theme.PRINT["ink"], lw=1.0, zorder=4, solid_capstyle="butt")
             if err:
-                ax.errorbar(x, height, yerr=err, fmt="none", elinewidth=0.9,
+                ax.errorbar(*_pair(x, height), **{f"{val}err": err},
+                            fmt="none", elinewidth=0.9,
                             capsize=2.0, capthick=0.9,
                             ecolor=theme.PRINT["ink"], zorder=4)
         else:                                            # 'none': the center only
-            ax.plot([x - bar_width / 2.4, x + bar_width / 2.4], [height] * 2,
+            # The line is the summary shape, so it carries the series colour the
+            # way a bar's fill or a violin's body does.  The error bar does not:
+            # it is a whisker, and whiskers are black in all four kinds -- it
+            # was the series colour here alone, which made one plot kind quietly
+            # unlike its neighbours.
+            ax.plot(*_pair([x - bar_width / 2.4, x + bar_width / 2.4], [height] * 2),
                     color=colour, lw=1.4, zorder=4, solid_capstyle="butt")
             if err:
-                ax.errorbar(x, height, yerr=err, fmt="none", elinewidth=0.9,
-                            capsize=2.5, capthick=0.9, ecolor=colour, zorder=4)
+                ax.errorbar(*_pair(x, height), **{f"{val}err": err},
+                            fmt="none", elinewidth=0.9, capsize=2.5, capthick=0.9,
+                            ecolor=theme.PRINT["ink"], zorder=4)
 
     # --- the points, which are the point ----------------------------------
     offsets: dict[str, np.ndarray] = {}
@@ -597,9 +817,14 @@ def group_plot(
             else:
                 dx = jitter(values.size, width, seed=seed + i * 97)
             offsets[label] = positions[label] + dx
-            ax.plot(offsets[label], values, "o", ms=point_size,
-                    mfc=theme.PRINT["point_face"], mec=theme.PRINT["point_edge"],
-                    mew=0.7, lw=0, zorder=6, clip_on=False)
+            # Filled in the group's colour with a hairline white halo, which
+            # is what separates two dots that land on each other -- the lab
+            # notebook's `edgecolor='w', linewidth=0.25`.  The box behind them
+            # is an outline, so a filled dot covers nothing.
+            ax.plot(*_pair(offsets[label], values), "o", ms=point_size,
+                    mfc=colours[i % len(colours)],
+                    mec=theme.PRINT["point_edge"],
+                    mew=0.25, lw=0, zorder=6, clip_on=False)
 
     # --- join the pairs ---------------------------------------------------
     if paired and points:
@@ -614,27 +839,37 @@ def group_plot(
             shared = set(keyed[left]) & set(keyed[right])
             for unit in shared:
                 il, ir = keyed[left][unit], keyed[right][unit]
-                ax.plot([offsets[left][il], offsets[right][ir]],
-                        [data[left][il], data[right][ir]],
+                ax.plot(*_pair([offsets[left][il], offsets[right][ir]],
+                               [data[left][il], data[right][ir]]),
                         color=theme.PRINT["muted"], lw=0.4, alpha=0.7, zorder=5)
 
     # --- frame ------------------------------------------------------------
-    ax.set_xticks(list(positions.values()))
+    getattr(ax, f"set_{cat}ticks")(list(positions.values()))
     labels = [
         f"{label}\n(n={len(data[label])})" if show_n else label for label in levels
     ]
-    ax.set_xticklabels(labels)
-    ax.set_xlim(-0.5 - bar_width * 0.1, len(levels) - 0.5 + bar_width * 0.1)
+    getattr(ax, f"set_{cat}ticklabels")(labels)
+    edge = 0.5 + bar_width * 0.1
+    if horizontal:
+        # Reversed, so the first group is at the top: a list of groups reads
+        # down the page, and drawing it upside down is the one thing everybody
+        # notices about a horizontal bar chart somebody else made.
+        ax.set_ylim(len(levels) - 1 + edge, -edge)
+    else:
+        ax.set_xlim(-edge, len(levels) - 1 + edge)
     if log_y:
-        ax.set_yscale("log")
+        getattr(ax, f"set_{val}scale")("log")
     elif zero_line and kind in ("bar", "none"):
-        low, high = ax.get_ylim()
+        low, high = getattr(ax, f"get_{val}lim")()
         if low < 0 < high:
-            ax.axhline(0, color=theme.PRINT["grid"], lw=0.6, zorder=1)
+            (ax.axvline if horizontal else ax.axhline)(
+                0, color=theme.PRINT["grid"], lw=0.6, zorder=1)
+    # The labels follow their own data round the corner, so turning a panel
+    # does not mean retyping them.
     if ylabel:
-        ax.set_ylabel(ylabel)
+        getattr(ax, f"set_{val}label")(ylabel)
     if xlabel:
-        ax.set_xlabel(xlabel)
+        getattr(ax, f"set_{cat}label")(xlabel)
     if title:
         ax.set_title(title)
     for side in ("top", "right"):
@@ -669,7 +904,7 @@ def xy_plot(
     Each entry of ``groups`` is ``{'label', 'x', 'mean', 'sem'}`` and may carry
     ``'n'``.  ``error`` is ``'band'``, ``'bars'``, ``'both'`` or ``'none'``.
     ``markers`` and ``line_styles`` are cycled across the curves, so groups
-    stay apart in a figure printed in grey.
+    stay apart in a figure printed in gray.
     """
     if ax is None:
         _, ax = plt.subplots()
@@ -817,7 +1052,7 @@ def _panel_grid(n: int, cols: int = 0) -> tuple[int, int]:
 
 
 def _step_colours(n: int, palette: str) -> list:
-    """One colour per step, in voltage order: a ramp, because the order is the protocol."""
+    """One color per step, in voltage order: a ramp, because the order is the protocol."""
     from matplotlib.colors import LinearSegmentedColormap
 
     ramps = {
@@ -833,15 +1068,15 @@ def _step_colours(n: int, palette: str) -> list:
 
 
 def _family_colours(panels: Sequence[dict], spec: "PlotSpec") -> list[list]:
-    """One colour per step of every panel, in panel order.
+    """One color per step of every panel, in panel order.
 
-    Colouring by voltage says what the protocol did; colouring by a field says
+    Coloring by voltage says what the protocol did; coloring by a field says
     what the cells were, and is the one that survives a figure with fourteen
     steps in it -- the ramp is unreadable at that count, and the panel titles
     already carry the voltages. Black is for the figure whose whole point is
-    the shape of the current, where colour is one more thing to explain.
+    the shape of the current, where color is one more thing to explain.
 
-    A field's colour is fixed across the whole figure, not per panel, so two
+    A field's color is fixed across the whole figure, not per panel, so two
     panels of the same construct match wherever they land in the grid.
     """
     by = (spec.family_colour or "voltage").strip()
@@ -864,7 +1099,7 @@ def family_plot(panels: Sequence[dict], spec: "PlotSpec", unit: str = "pA/pF"):
 
     Each panel is ``{'label', 'n', 'time_ms', 'sweeps': [{'voltage_mv',
     'mean', 'sem'}]}``, with a ``'keys'`` of the values it was grouped by if
-    the traces are to be coloured by one. Panels share one y range so their
+    the traces are to be colored by one. Panels share one y range so their
     currents can be compared by eye, which is also why the scale bar is drawn
     once, on the first. Returns ``(fig, axes)``.
 
@@ -873,7 +1108,7 @@ def family_plot(panels: Sequence[dict], spec: "PlotSpec", unit: str = "pA/pF"):
     where the saving happens, and a block around this call would put the
     two back on opposite sides of it.
     """
-    with publication_style(font_pt=spec.font_pt):
+    with publication_style(font_pt=spec.font_pt, font=spec.font):
         rows, cols = _panel_grid(len(panels), spec.panel_cols)
         width_in = max(spec.panel_width_mm, 8.0) * MM * cols
         height_in = max(spec.panel_height_mm, 8.0) * MM * rows
@@ -1037,7 +1272,7 @@ def _fmt(value: float) -> str:
 def save_figure(
     figure,
     path: str | os.PathLike,
-    formats: tuple[str, ...] = ("png", "svg"),
+    formats: tuple[str, ...] = ("png", "pdf"),
     dpi: int = 300,
     transparent: bool = True,
 ) -> list[Path]:
@@ -1046,6 +1281,13 @@ def save_figure(
     Always both a raster to look at and a vector to edit, because the figure
     that goes in the paper is never the first one produced.  Never depends on
     the current working directory and never touches the pyplot global figure.
+
+    The vector one is PDF.  It is what journals ask for, it is one file rather
+    than a file plus whatever fonts the reader happens to have, and the text
+    stays text: ``pdf.fonttype: 42`` in the rcParams above embeds the TrueType
+    outlines instead of drawing the glyphs as paths, so a label can still be
+    edited in Illustrator -- the same promise ``svg.fonttype: 'none'`` makes
+    for SVG.  Pass ``formats=("png", "svg")`` where an SVG is wanted.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1076,17 +1318,60 @@ class PlotSpec:
     error: str = "sem"             # sem | sd | ci | none
     points: str = "jitter"         # jitter | swarm | strip | none
     palette: str = "red-grey"      # a key into PALETTES
-    #: Per-series colour, ``{"KO": "#c62f34"}``, overriding the palette for the
+    #: Per-series color, ``{"KO": "#c62f34"}``, overriding the palette for the
     #: names it mentions.  "KO is this red" is a decision about a paper, not
     #: about a palette, and it has to survive a figure gaining a group.
     colours: dict[str, str] = field(default_factory=dict)
+    #: The sequence the conditions are drawn in, ``["WT", "P716L", "Y715C"]``.
+    #: Empty leaves them in the order the data arrived, which for most callers
+    #: is alphabetical -- and alphabetical puts the wild type after the mutants.
+    #: Named by name, like :attr:`colours`, and for the same reason: an order
+    #: has to survive the figure gaining a condition.  :func:`order_series` says
+    #: what happens to a condition this does not mention.
+    order: list[str] = field(default_factory=list)
     width_mm: float = 85.0         # single column
     height_mm: float = 0.0         # 0 = derive from width
     #: The plotting area of one panel, labels *outside* it -- see
     #: :func:`fit_axes`.  0 leaves the size to ``width_mm``/``height_mm``.
     axes_width_mm: float = 0.0
     axes_height_mm: float = 0.0
+    #: The printed width of one bar, box or violin, in mm.  The panel is sized
+    #: from it and the number of groups, so a bar is the same size on the page
+    #: whether there are two of them or seven -- which is the thing a reader
+    #: compares across a figure, and the thing that goes wrong when a panel is
+    #: instead stretched to fill a column.
+    #:
+    #: 3.94 mm puts a category at 6.35 mm, which is 0.25 in -- the pitch the
+    #: lab's ephys notebook draws at (``figsize=(0.25*18, 1.2)``), so a panel
+    #: from an app and a panel from that notebook sit side by side at one
+    #: scale.  It also clears the ``(n = 5)`` under a group name (5.33 mm at
+    #: 7 pt), which 3 mm did not.  Two groups make a panel 12.7 mm wide, so
+    #: six stand in one journal column.  Names longer than about five
+    #: characters -- ``rescue`` -- still want the x rotation.
+    #:
+    #: ``width_mm`` becomes a ceiling rather than the width.  0 hands the
+    #: width back to it; ``axes_width_mm``, being explicit, wins over both.
+    #: ``'xy'`` and ``'trace'`` have no categories and ignore this.
+    bar_mm: float = 3.94
+    #: Turn the panel a quarter turn: groups down the y axis, bars reaching
+    #: right, first group at the top.  Everything else is the same figure --
+    #: the value label follows the values to the x axis, ``log_y`` and the
+    #: reference lines follow them too, and the significance brackets stack to
+    #: the right instead of upward.
+    #:
+    #: The sizing follows as well, with the two axes swapped: :attr:`bar_mm`
+    #: now sets the panel's *height* -- one bar is the same thickness on the
+    #: page whatever the group count -- and :attr:`axes_width_mm` pins the
+    #: value axis the way :attr:`axes_height_mm` does upright.  The ceiling
+    #: moves with it, from ``width_mm`` to ``height_mm``; 0 there means the
+    #: panel grows with the groups, which is the point of turning it.
+    #:
+    #: Which is what long names want: ``R201C`` and ``rescue`` get a whole
+    #: column to themselves instead of the 6.35 mm of tick a 3.94 mm bar
+    #: leaves them.  ``'xy'`` and ``'trace'`` have no categories and ignore it.
+    horizontal: bool = False
     font_pt: float = 8.0
+    font: str = "arial"            # a key into FONTS
     log_y: bool = False
     show_n: bool = True
     legend: bool = True
@@ -1095,7 +1380,7 @@ class PlotSpec:
     xlabel: str = ""
 
     # --- axes -------------------------------------------------------------
-    #: What the size boxes are typed in. The stored numbers stay millimetres.
+    #: What the size boxes are typed in. The stored numbers stay millimeters.
     size_unit: str = "mm"          # mm | in
     xlim: str = ""                 # "min, max"; empty leaves it to the data
     ylim: str = ""
@@ -1132,12 +1417,12 @@ class PlotSpec:
     #: Join the points of a curve at all.
     join: bool = True
     #: Size of the individual points on a group plot.
-    point_size: float = 3.2
+    point_size: float = 2.5
 
     # --- step families (one panel per group) ------------------------------
     #: Size of each panel, in mm; the figure is as many of them as there are.
     panel_width_mm: float = 25.4
-    panel_height_mm: float = 50.8
+    panel_height_mm: float = 38.1      # 1 x 1.5 in, matching PANEL_HEIGHT_IN
     #: Panels per row; 0 lays them out as near a square as the count allows.
     panel_cols: int = 0
     #: Scale bar lengths: seconds, and the current unit. 0 picks round ones.
@@ -1146,10 +1431,10 @@ class PlotSpec:
     #: Shade each step's SEM. Off by default: fourteen overlapping bands hide
     #: the currents they describe.
     family_spread: bool = False
-    #: What sets a trace's colour. ``"voltage"`` ramps across the steps of a
+    #: What sets a trace's color. ``"voltage"`` ramps across the steps of a
     #: panel, ``"black"`` draws them all in ink, and any other value is read as
     #: a grouping field ("construct", "condition", ...): every step of a panel
-    #: then takes the colour of that field's value, shared across panels.
+    #: then takes the color of that field's value, shared across panels.
     family_colour: str = "voltage"   # voltage | black | <field name>
 
     # --- p-values on the figure ------------------------------------------
@@ -1164,9 +1449,17 @@ class PlotSpec:
     p_alpha: float = 0.05
     p_pair_on: str = ""            # column identifying what is paired
 
+    #: What a panel is, in the absence of anything asking for something else:
+    #: 1.5 inches tall.  It used to be 0.72 of the width, which tied the height
+    #: to a number that no longer sets the width -- with :attr:`bar_mm` sizing
+    #: the panel from its bars, a default bar chart came out 0.85 x 2.41 in, a
+    #: sliver.  It also meant a two-column figure was 5 inches tall for one
+    #: panel.  A height has nothing to do with how wide a figure is.
+    PANEL_HEIGHT_IN = 1.5
+
     def figsize(self) -> tuple[float, float]:
         width = max(self.width_mm, 25.0) * MM
-        height = (self.height_mm * MM) if self.height_mm else width * 0.72
+        height = (self.height_mm * MM) if self.height_mm else self.PANEL_HEIGHT_IN
         return (width, height)
 
     def to_dict(self) -> dict:
@@ -1230,14 +1523,63 @@ def series_names(data) -> list[str]:
     return [str(d.get("label", "") if isinstance(d, dict) else d) for d in data]
 
 
-def colours_for(spec: "PlotSpec | dict", data) -> list[str]:
-    """One colour per series: the named palette, with the spec's overrides on top.
+def order_series(names, order) -> list[str]:
+    """``names`` put in the sequence ``order`` asks for, keeping the strangers.
 
-    ``spec.colours`` is what the colour boxes in the panel write, and it is
+    The sequence a reader needs is almost never alphabetical: ``WT``, ``P716L``,
+    ``Y715C`` is the order of the mutation along the protein, and sorted() puts
+    the wild type last.  So the order is the user's to state, and this is the one
+    rule that applies it everywhere -- the figure, the colors, the brackets and
+    the legend all read the same list.
+
+    A name ``order`` does not mention keeps its place *after* the ones that are
+    mentioned, rather than disappearing: a saved order outlives the dataset it
+    was typed for, and the commonest thing to happen next is a new condition.
+    Dropping it silently would be a figure missing a genotype that nobody asked
+    to hide.  A name in ``order`` that is not in the data is simply skipped.
+    """
+    names = [str(n) for n in names]
+    if not order:
+        return names
+    want = [str(o) for o in order]
+    seen = set()
+    first = [n for n in want if n in names and not (n in seen or seen.add(n))]
+    return first + [n for n in names if n not in seen]
+
+
+def reorder_data(data, order):
+    """``data`` in the sequence :func:`order_series` gives, whatever shape it is.
+
+    ``{label: values}`` for the group kinds and ``[{'label': ...}, ...]`` for
+    the curve kinds, which is every shape :func:`figure_from_spec` takes.  Doing
+    it to the data once, before anything reads it, is what keeps the order out
+    of the drawing code: the colors are assigned by walking the series
+    (:func:`colours_for`), the positions by drawing them, and the brackets by
+    reading the positions back, so all three follow a reordered input without
+    knowing an order exists.  Passing an order to the drawing instead would have
+    left :func:`colours_for` walking the old sequence and quietly handed every
+    series its neighbour's color.
+    """
+    if not order:
+        return data
+    want = order_series(series_names(data), order)
+    if isinstance(data, dict):
+        return {k: data[k] for k in want if k in data}
+    at = {}
+    for item in data:
+        at.setdefault(str(item.get("label", "") if isinstance(item, dict) else item),
+                      []).append(item)
+    return [item for name in want for item in at.get(name, [])]
+
+
+def colours_for(spec: "PlotSpec | dict", data) -> list[str]:
+    """One color per series: the named palette, with the spec's overrides on top.
+
+    ``spec.colours`` is what the color boxes in the panel write, and it is
     keyed by the *name* of the series rather than its position -- so a scheme
     saved for a two-genotype figure still puts the KO in the same red when a
     third genotype appears in the middle of the list, which an index-keyed one
-    would not.  Names it does not mention keep the palette's colour.
+    would not.  Names it does not mention keep the palette's color.
     """
     spec = spec if isinstance(spec, PlotSpec) else PlotSpec.from_dict(spec)
     base = PALETTES.get(spec.palette, theme.SERIES)
@@ -1290,7 +1632,7 @@ def fit_axes(fig, width_mm: float = 0.0, height_mm: float = 0.0,
         dh = nrow * (want_h - box.height) if want_h > 0.0 else 0.0
         size = (max(wide + dw, 0.3), max(high + dh, 0.3))
         fig.set_size_inches(*size)
-        if abs(dw) < 0.008 and abs(dh) < 0.008:      # a fifth of a millimetre
+        if abs(dw) < 0.008 and abs(dh) < 0.008:      # a fifth of a millimeter
             break
     return size
 
@@ -1402,10 +1744,14 @@ def style_axes(ax, spec: "PlotSpec") -> None:
     Applied after the data are drawn, so limits and ticks the user asked for
     win over whatever the data suggested.
     """
+    # "log y" and the reference lines are about the *values*, which a
+    # horizontal panel keeps on x.  Following the data round is the whole
+    # contract of the flag: nothing about a turned panel should be retyped.
+    value_axis = "x" if _is_horizontal(spec) else "y"
     if spec.log_x:
         ax.set_xscale("log")
-    if spec.log_y and ax.get_yscale() != "log":
-        ax.set_yscale("log")
+    if spec.log_y and getattr(ax, f"get_{value_axis}scale")() != "log":
+        getattr(ax, f"set_{value_axis}scale")("log")
 
     _apply_ticks(ax, "x", spec.xticks, spec.xtick_labels, spec.xtick_rotation)
     _apply_ticks(ax, "y", spec.yticks, spec.ytick_labels, spec.ytick_rotation)
@@ -1422,7 +1768,8 @@ def style_axes(ax, spec: "PlotSpec") -> None:
         ax.grid(False)
 
     for value in _numbers(spec.ref_lines):
-        ax.axhline(value, color=theme.PRINT["grid"], lw=0.6, ls=(0, (2, 3)), zorder=1)
+        (ax.axvline if value_axis == "x" else ax.axhline)(
+            value, color=theme.PRINT["grid"], lw=0.6, ls=(0, (2, 3)), zorder=1)
 
     if spec.spines == "box":
         for side in ("top", "right", "left", "bottom"):
@@ -1443,7 +1790,7 @@ def style_axes(ax, spec: "PlotSpec") -> None:
             ax.spines[side].set_visible(False)
 
     if spec.spines == "zero":
-        # With the axes crossing in the middle of the data, a centred axis
+        # With the axes crossing in the middle of the data, a centered axis
         # label lands on the plot. The lab's own script put them at the ends.
         if ax.get_xlabel():
             ax.set_xlabel(ax.get_xlabel(), loc="right")
@@ -1489,10 +1836,14 @@ def figure_from_spec(
     annotated, or ``None``.
     """
     spec = spec if isinstance(spec, PlotSpec) else PlotSpec.from_dict(spec)
+    # First, so that everything below -- the colors, the drawing order, the
+    # positions the brackets are hung from -- reads one sequence.
+    data = reorder_data(data, spec.order)
     palette = colours_for(spec, data)
     table = None
 
-    with publication_style(font_pt=spec.font_pt, figure__figsize=spec.figsize()):
+    with publication_style(font_pt=spec.font_pt, font=spec.font,
+                           figure__figsize=spec.figsize()):
         own_figure = ax is None
         if own_figure:
             fig, ax = plt.subplots(figsize=spec.figsize(), layout="constrained")
@@ -1522,6 +1873,7 @@ def figure_from_spec(
                 points=spec.points or False, paired=paired, palette=palette,
                 ax=ax, ylabel=spec.ylabel, xlabel=spec.xlabel, title=spec.title,
                 show_n=spec.show_n, log_y=spec.log_y, point_size=spec.point_size,
+                horizontal=_is_horizontal(spec),
             )
             if spec.show_p:
                 table = (comparisons_for(spec, data, pair_on=paired)
@@ -1534,5 +1886,46 @@ def figure_from_spec(
     # gets saved.  Fitted inside the block, a bar panel asked for 2.00 in came
     # out 2.08.  See check_plot_sizing.py, which measures it from out here.
     if own_figure:
-        fit_axes(fig, spec.axes_width_mm, spec.axes_height_mm)
+        # ``bar_mm`` sizes the axis the categories sit on, which is x upright
+        # and y turned; the other axis keeps its own pinned number, and the
+        # figure dimension across the categories is the ceiling.  One index
+        # rather than two copies of the fit.
+        sideways = _is_horizontal(spec)
+        across = 1 if sideways else 0
+        want = [spec.axes_width_mm, spec.axes_height_mm]
+        ceiling = spec.height_mm if sideways else spec.width_mm
+        # The value axis is a fixed length unless somebody typed one, for the
+        # reason in AXES_LENGTH_MM.  'xy' and 'trace' have no categories, so
+        # `across` is only ever the orientation there: the vertical axis.
+        #
+        # ``height_mm`` is a typed *figure* height and outranks the default --
+        # it defaults to 0, so a number there was asked for.  ``width_mm`` is
+        # not the same thing: it is always set, and documented as a column
+        # ceiling rather than a target, so a turned panel still gets the pin.
+        typed = spec.height_mm > 0 if not sideways else False
+        if not want[1 - across] and not typed:
+            want[1 - across] = AXES_LENGTH_MM
+        if not want[across] and spec.bar_mm > 0 and spec.kind not in ("xy", "trace"):
+            # The categories span that axis, so one bar is BAR_WIDTH of
+            # (span / n).  Read the span rather than counting the groups: it
+            # already carries whatever limit the spec asked for.
+            limits = ax.get_ylim() if sideways else ax.get_xlim()
+            want[across] = spec.bar_mm * abs(float(np.diff(limits)[0])) / BAR_WIDTH
+        settled = fit_axes(fig, *want)
+        # A column width is a ceiling, not a target.  Two groups at 6 mm a bar
+        # is a panel a third of a column wide, and three of those side by side
+        # are the figure; twenty groups would run off the page instead, so the
+        # bars give way rather than the column.  Looped, because taking the
+        # width off the panel puts some of it back as furniture: the tick
+        # labels crowd and ask for more room than they did at the first fit.
+        #
+        # Turned, the ceiling is ``height_mm``, which is 0 unless somebody
+        # typed one -- so a horizontal panel grows down the page with its
+        # groups until it is told not to, which is the reason to turn it.
+        for _ in range(3):
+            over = settled[across] / MM - ceiling
+            if not (want[across] and ceiling > 0 and over > 0.01):
+                break
+            want[across] = max(want[across] - over, 5.0)
+            settled = fit_axes(fig, *want)
     return fig, ax, table

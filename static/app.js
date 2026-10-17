@@ -123,7 +123,7 @@ async function runJob(jobId, el, label) {
 
 /* ------------------------------------------------------------- filesystem
    The dialog is labkit's, so choosing a folder here works exactly as it does
-   in the vesicle detector and the figure builder -- folders on the left, the
+   in pHerret and the figure builder -- folders on the left, the
    images actually in them on the right. */
 const IMAGE_EXTS = ['.czi', '.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
 
@@ -221,8 +221,8 @@ function applyQC(qc) {
   const islands = {};
   (qc.tiles || []).forEach(t => islands[t.island] = (islands[t.island] || 0) + 1);
   $('#qc-summary').innerHTML =
-    `<b>${med === null ? '—' : med.toFixed(3)}</b> median agreement with neighbours\n` +
-    `<b>${bad}</b> tile(s) contradicting a neighbour\n` +
+    `<b>${med === null ? '—' : med.toFixed(3)}</b> median agreement with neighbors\n` +
+    `<b>${bad}</b> tile(s) contradicting a neighbor\n` +
     `islands: ${Object.entries(islands).map(([k, v]) => `${k}:${v}`).join('  ')}`;
 }
 
@@ -366,7 +366,7 @@ async function snap(indices) {
       if (res.detail.length === 1) {
         const d = res.detail[0];
         $('#status').textContent = d.ok
-          ? `moved by ${d.dx.toFixed(1)}, ${d.dy.toFixed(1)} px to agree with ${d.votes.length} neighbour(s)`
+          ? `moved by ${d.dx.toFixed(1)}, ${d.dy.toFixed(1)} px to agree with ${d.votes.length} neighbor(s)`
           : `could not align: ${d.reason}`;
       } else {
         const shift = ok.length
@@ -523,7 +523,7 @@ function fitView() {
   S.view.oy = y0 - (r.height / z - (y1 - y0)) / 2;
 }
 
-/* The canvas paints with the stylesheet's colours, so the theme is defined in
+/* The canvas paints with the stylesheet's colors, so the theme is defined in
    one place.  Read once and cached: qcColour runs per tile per frame, and
    getComputedStyle forces a style resolve every time it is called. */
 const PALETTE = (() => {
@@ -579,9 +579,9 @@ function draw() {
   // Laying one tile over another and fading it does nothing here, and the
   // first version of this control did exactly that: brightfield tiles are
   // white with a little dark tissue on them, and white over white is white at
-  // any opacity.  Measured over the neighbouring tile, dropping the moving
+  // any opacity.  Measured over the neighboring tile, dropping the moving
   // tile to 40 % moved the pixels underneath it by 14 of 255 -- the tile
-  // dimmed against the dark stage and hid its neighbour just as completely.
+  // dimmed against the dark stage and hid its neighbor just as completely.
   //
   // What matters in these images is only where the tissue is dark, so the
   // moving tile is multiplied into what is under it instead: white stops
@@ -751,7 +751,7 @@ function pointInPolygon(x, y, poly) {
 /* Which tiles does the drawn region pick up?
  *
  * The rectangle takes anything it touches, which is what a marquee is expected
- * to do.  The lasso takes a tile when the tile's centre or any of its corners is
+ * to do.  The lasso takes a tile when the tile's center or any of its corners is
  * inside the loop -- a lasso is usually drawn round a cluster rather than
  * precisely along tile edges, and requiring full enclosure would mean nothing is
  * ever caught when the pieces are larger than the gesture.
@@ -982,6 +982,12 @@ window.addEventListener('mouseup', async (ev) => {
 
 cv.addEventListener('wheel', ev => {
   ev.preventDefault();
+  if (!(ev.ctrlKey || ev.metaKey)) {        // two-finger pan; pinch/ctrl zooms
+    S.view.ox += ev.deltaX / S.view.z;
+    S.view.oy += ev.deltaY / S.view.z;
+    draw();
+    return;
+  }
   const r = cv.getBoundingClientRect();
   const mx = ev.clientX - r.left, my = ev.clientY - r.top;
   const [wx, wy] = s2w(mx, my);
@@ -1119,7 +1125,7 @@ $('#btn-analyze').onclick = () => runAnalysis(null);
  * Redirecting the outline by hand.
  *
  * No rule gets every section right, and the ones it gets wrong are not defects
- * so much as judgements: which of two touching vessels to follow, whether to go
+ * so much as judgments: which of two touching vessels to follow, whether to go
  * up a branch or past it, where a torn wall ought to be joined.  Those are
  * questions about the specimen, and the person looking at it can answer them in
  * a second.
@@ -1128,7 +1134,7 @@ $('#btn-analyze').onclick = () => runAnalysis(null);
  * usually right nearly everywhere; the stroke's two ends are matched to the two
  * nearest points on the existing outline and the shorter way round between them
  * is what gets replaced.  Accuracy is not required of the drawing -- the
- * re-centring pass pulls it onto the middle of the media before anything is
+ * re-centering pass pulls it onto the middle of the media before anything is
  * measured, which it does for the automatic curve too.
  */
 /* `um` is the outline being drawn or edited; `kept` holds the ones already
@@ -1319,7 +1325,7 @@ function drawOutline() {
     g.stroke();
   };
   // Every outline white on a dark halo, as the figure draws it. The live one
-  // is told apart by weight rather than by colour: a coloured line laid along
+  // is told apart by weight rather than by color: a colored line laid along
   // a wall is the thing you are trying to see through when you score by eye,
   // and it reads as stain.
   OUT.kept.forEach((o) => {
@@ -1428,7 +1434,7 @@ function spliceStroke(stroke) {
  * Redrawing a stretch cannot fix a trace that is right for its whole length
  * and then carries on somewhere it should not -- into the junction the two
  * limbs of an arch share, or off along the next vessel.  There is nothing to
- * redirect there; the wall simply stops, and where it stops is a judgement
+ * redirect there; the wall simply stops, and where it stops is a judgment
  * about the specimen.  So the stretch between the click and the *nearer* end
  * goes, and two clicks set both ends.
  *
@@ -1555,7 +1561,7 @@ function openOutlineEditor(o, rank, others) {
   };
   $('#btn-outline-reset').onclick = () => {
     // The ring/arc flag is part of the outline, so restoring one without the
-    // other hands back the automatic curve labelled as something it is not.
+    // other hands back the automatic curve labeled as something it is not.
     OUT.undo = []; OUT.kept = []; OUT.um = OUT.base.slice();
     OUT.closed = !!OUT.baseClosed;
     $('#w-outline-closed').checked = OUT.closed;
@@ -1596,7 +1602,7 @@ function openOutlineEditor(o, rank, others) {
     if (!all.length) return outlineNote('draw an outline first');
     // The editor edits one wall at a time.  The other walls in the section are
     // named so the server measures them too -- by rank, not by sending their
-    // outlines back, because a curve fed through the re-centring a second time
+    // outlines back, because a curve fed through the re-centering a second time
     // comes back a few per cent longer.  Leaving them out is what used to make
     // the second vessel disappear the moment the first one was redrawn.
     const drawn = all.map((g) => g.rank);
@@ -1612,7 +1618,7 @@ function openOutlineEditor(o, rank, others) {
  * and free to drift from it. Instead the server keeps the WallResult behind
  * each figure it draws (see FIGURE_CACHE in app.py), and a style change here
  * asks it to redraw that same figure -- rotation, size, type scale, boxes,
- * grid -- overwriting the PNG and SVG a plain analysis run would have saved.
+ * grid -- overwriting the PNG and PDF a plain analysis run would have saved.
  *
  * Style is one shared, sticky state rather than per-vessel: it is meant to
  * answer "how should this kind of figure look", and switching vessels or
@@ -1727,13 +1733,13 @@ function showWallResult(r, guided, rank) {
   let v = vs.find((x) => x.rank === pick) || null;
   // Asking for a vessel this run does not have -- the wall that was on screen
   // was merged away, or the settings changed under it -- shows the first one
-  // rather than an empty panel labelled with a rank nothing answers to.
+  // rather than an empty panel labeled with a rank nothing answers to.
   if (!v && vs.length) { v = vs[0]; pick = v.rank; }
   if (v) {
     r = Object.assign({}, r, {
       totals: v.totals, paths: v.paths,
       rectangular_channels_png: v.rectangular_channels_png,
-      rectangular_channels_svg: v.rectangular_channels_svg,
+      rectangular_channels_pdf: v.rectangular_channels_pdf,
       straight_png: v.straight_png,
       rectangular_png: v.paths.rectangular || r.rectangular_png,
       outline: v.outline || r.outline,
@@ -1799,7 +1805,7 @@ function showWallResult(r, guided, rank) {
       'the banding the measure above deliberately excludes: elastic lamellae on a 4-5 µm pitch. Not a finding on its own — a crisply cut section bands strongly and is not a broken one. Read it against the edge width below']);
     rows.push(['lamellar spacing',
       t.lamellar_spacing_um.toFixed(2) + ' µm',
-      'distance between successive layers, from the same banding. Blur merges neighbouring lamellae and inflates this, so check the edge width before comparing sections']);
+      'distance between successive layers, from the same banding. Blur merges neighboring lamellae and inflates this, so check the edge width before comparing sections']);
     rows.push(['lamellar disorder',
       t.lamellar_disorder.toFixed(3) + '  (on ' + (100 * t.lamellar_coverage).toFixed(0) + ' % of the wall)',
       'spread of the gaps between successive layers, over their mean. Low means evenly stacked lamellae; high means layers that have merged, split or gone missing. Only measurable where three layers could be found, hence the coverage — and blur inflates it, so check the edge width']);
@@ -1865,11 +1871,11 @@ function showWallResult(r, guided, rank) {
     `\n${r.paths.totals.replace(/[^/]+$/, '')}`;
   const bust = '&t=' + Date.now();
   const img = (p) => `<img src="/api/file?path=${encodeURIComponent(p)}${bust}">`;
-  const svg = `/api/file?path=${encodeURIComponent(r.rectangular_channels_svg)}`;
+  const pdf = `/api/file?path=${encodeURIComponent(r.rectangular_channels_pdf)}`;
   $('#w-summary').innerHTML =
     `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
        <b>Full analysis figure</b>
-       <a class="btn ghost" href="${svg}" download>Download SVG</a></div>` +
+       <a class="btn ghost" href="${pdf}" download>Download PDF</a></div>` +
     `<div class="hint" style="margin-bottom:8px">The map, every profile plot -- thickness,
       collagen per length, collagen ÷ muscle running along the wall -- and the regression
       against thickness, all from the same trace the numbers above were computed from. Use
@@ -1983,7 +1989,7 @@ ORGANS.kidney = {
   counterstain: 'parenchyma',
   // Inner and outer medulla listed separately, and both kept alongside the
   // general 'medulla' rather than replacing it: a section cut where the two
-  // cannot be told apart should be labelled 'medulla' and not forced into a
+  // cannot be told apart should be labeled 'medulla' and not forced into a
   // distinction the tissue does not support. cohort.py already reads all four
   // out of folder names and orders them anatomically, so a region named here
   // groups with the same region read from a name.
@@ -2072,6 +2078,11 @@ folder name have its say back.">
           <option value="mouse">one mouse, pooled</option>
           <option value="section">one section</option>
         </select></label>
+      <label class="row" title="What the bars are. Genotype unless this batch spans
+something else worth splitting on — age, or one bar per animal. The color boxes under
+Colors below name whatever this picks, so a color belongs to a group and not to its
+place on the axis."><span>Bars are</span>
+        <select id="${p}-groupby"><option value="genotype">genotype</option></select></label>
       <label class="row" title="How many panels go across. This figure grows with the run
 — one panel per readout per ${cfg.regionWord} — so set the panel size itself under Axes in
 the plot controls below, and the figure becomes whatever that makes it."><span>Columns</span>
@@ -2084,7 +2095,7 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
       <div id="${p}-controls"></div>
       <div id="${p}-readouts" class="checks"></div>
       <button id="${p}-plot" class="primary wide">Plot</button>
-      <a id="${p}-svg" class="btn wide hidden" download>Download SVG</a>
+      <a id="${p}-pdf" class="btn wide hidden" download>Download PDF</a>
       <div class="hint">Drawn from the <code>cohort_*.csv</code> already on disk, so the
         controls cost nothing to turn. Each dot is one animal; the brackets carry
         the Welch p from <code>cohort_comparison.csv</code>, corrected within each panel.</div>
@@ -2257,7 +2268,7 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
 
   /* --- cohort plots ------------------------------------------------------
      Server-side matplotlib, same as the analysis figure, so the two share a
-     type scale and both come out as PNG to look at and SVG to edit. */
+     type scale and both come out as PNG to look at and PDF to edit. */
   q('readouts').innerHTML = cfg.readouts.map(([k, label, on]) =>
     `<label><input type="checkbox" value="${k}"${on ? ' checked' : ''}>${label}</label>`).join('');
 
@@ -2286,7 +2297,8 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
       const num = (k) => (q(k).value.trim() === '' ? null : +q(k).value);
       const r = await api('/api/cohort/plot', {
         organ, readouts, out_dir: q('out').value.trim() || null,
-        unit: q('unit').value, spec: B.panel.spec(), ncol: num('ncol'),
+        unit: q('unit').value, group_by: q('groupby').value,
+        spec: B.panel.spec(), ncol: num('ncol'),
         stains_together: !!(q('stains') && q('stains').checked),
         title: q('parent').value.trim().split('/').filter(Boolean).pop() || '',
       });
@@ -2298,18 +2310,36 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
         // wall analysis.
         (r.depth_png ? `<h3 class="sec">Through the wall</h3>` +
           `<img src="${file(r.depth_png)}&t=${Date.now()}">` +
-          `<div class="hint"><a href="${file(r.depth_svg)}" download>this one as SVG</a>` +
+          `<div class="hint"><a href="${file(r.depth_pdf)}" download>this one as PDF</a>` +
           (r.depth_source_csv ? ` · <a href="${file(r.depth_source_csv)}" download>source data
              (CSV)</a> — one row per depth per condition, mean, SD between animals, and n` : '') +
           `</div>` : '');
-      const a = q('svg');
-      a.href = `/api/file?path=${encodeURIComponent(r.svg)}`;
+      const a = q('pdf');
+      a.href = `/api/file?path=${encodeURIComponent(r.pdf)}`;
       a.classList.remove('hidden');
-      // A colour box per genotype, named by the figure rather than guessed at
-      // here -- the server says which genotypes it just drew.
+      // A color box per group, named by the figure rather than guessed at
+      // here -- the server says what it could split on and what it just drew,
+      // so a field this batch does not carry cannot end up in the box.
+      setGroupFields(r.fields || [], r.group_by || 'genotype');
       B.panel.setColourKeys(r.groups || []);
       B.plotDrawn = true;
     } catch (e) { if (!quiet) alert(e.message); }
+  }
+
+  /* Rebuilt only when the list of fields changes: rebuilding it under an open
+     dropdown closes the dropdown, and the server sends the same list back on
+     every redraw. */
+  let groupSig = null;
+  function setGroupFields(fields, chosen) {
+    const sel = q('groupby');
+    const sig = (fields || []).join('\u0000');
+    if (sig !== groupSig) {
+      groupSig = sig;
+      sel.innerHTML = '';
+      (fields.length ? fields : ['genotype']).forEach((f) => sel.appendChild(
+        LK.el('option', { value: f, text: f })));
+    }
+    sel.value = chosen;
   }
 
   q('plot').onclick = () => drawPlot(false);
@@ -2317,6 +2347,7 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
   // boxes are debounced like labkit's own: typing "55" is two input events and
   // each redraw is a matplotlib render on the server.
   q('unit').onchange = () => drawPlot(true);
+  q('groupby').onchange = () => drawPlot(true);
   q('readouts').onchange = () => drawPlot(true);
   q('ncol').oninput = replot;
   if (q('stains')) q('stains').onchange = replot;
@@ -2408,7 +2439,7 @@ function smoothClosed(anchors, stepUm) {
   for (let i = 0; i < n; i++) {
     const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
     // Enough samples that the curve is smooth at this segment's length, and
-    // no more: the polygon is rasterised on the server and extra vertices
+    // no more: the polygon is rasterized on the server and extra vertices
     // buy nothing but bytes.
     const steps = Math.max(2, Math.min(40, Math.round(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / Math.max(stepUm, 1e-6))));
     for (let s = 0; s < steps; s++) {
@@ -2530,7 +2561,7 @@ function makeOrganPane(organ, panelHost, stageHost) {
       <div class="row" style="gap:8px;align-items:center;margin-bottom:6px">
         <b>Figure style</b>
         <span class="hint" style="margin:0">Restyles the figure below in place — the same PNG
-          and SVG a run saves, redrawn from the same numbers. Rotating turns the picture
+          and PDF a run saves, redrawn from the same numbers. Rotating turns the picture
           panels only: area, optical density and the comparison between two stains do not
           care which way the section was laid on the stage, so this is the same analysis at
           a different angle.</span>
@@ -3012,7 +3043,7 @@ function makeOrganPane(organ, panelHost, stageHost) {
   /* --- figure style --------------------------------------------------
      The figure is matplotlib's, not a client redraw of it: the server keeps
      the result behind each figure (FIGURE_CACHE in app.py) and a style change
-     asks it to redraw that same figure, overwriting the PNG and the SVG a
+     asks it to redraw that same figure, overwriting the PNG and the PDF a
      plain run would have saved.  Sticky across runs, because it answers "how
      should this kind of figure look" and re-measuring should not undo it. */
   const FS_DEFAULT = { rot: 0, panel: 3, font: 10.5, grid: true, spines: true,
@@ -3197,7 +3228,7 @@ function showOrganResult(organ, q, r) {
       diagonal drawn on it. Everything above the diagonal is counted. The dashed line is
       the background level that was subtracted — it is measured on blank slide, so how
       much of the answer rests on that correction stays visible.
-      <a href="/api/file?path=${encodeURIComponent(r.figure_svg)}" download>Download SVG</a></div>`;
+      <a href="/api/file?path=${encodeURIComponent(r.figure_pdf)}" download>Download PDF</a></div>`;
 }
 
 /* Build the panes.  The aorta tab keeps its hand-written wall controls and

@@ -87,6 +87,11 @@ def stars(p_value: float, show_ns: bool = True) -> str:
     """
     if p_value is None or not np.isfinite(p_value):
         return ""
+    # Five, not four: the lab's own ladder in `voltage_clamp_processing.py`
+    # runs ***** below 1e-5, and a figure that stops at **** reads as a
+    # weaker result than the same data drawn in the notebook.
+    if p_value < 0.00001:
+        return "*****"
     if p_value < 0.0001:
         return "****"
     if p_value < 0.001:
@@ -643,7 +648,9 @@ def factorial(
 
     within = [n for n in names
               if subject and frame.groupby("s")[n].nunique().max() > 1]
-    repeated = bool(within) and frame.groupby("s").size().max() > 1 if subject else False
+    # bool() because pandas 3 returns np.int64 from .size().max(), which makes this
+    # np.True_ -- and attrs["repeated"] is compared with `is True` and json.dumps'd.
+    repeated = bool(within and frame.groupby("s").size().max() > 1) if subject else False
 
     cells = int(np.prod([frame[n].nunique() for n in names]))
     empty = cells - frame.groupby(names, dropna=False).ngroups

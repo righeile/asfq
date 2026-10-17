@@ -11,7 +11,7 @@ becomes simply how much of this tissue is collagen.
 Two things carry over from the wall work unchanged, because they are about the
 stain rather than about the aorta:
 
-*Optical density, not hue.*  Concentrations come from colour deconvolution, so
+*Optical density, not hue.*  Concentrations come from color deconvolution, so
 a pale section and a dark one give the same answer.  A hue-and-saturation
 score cannot, because it confounds how much dye is present with how dark the
 field happened to be.
@@ -246,7 +246,7 @@ def analyze_fibrosis(
     Macenko on this one image, which is deliberate -- see
     :func:`shared_stain_matrix` for what per-image estimation does to tissue
     that is nearly all one stain.  ``params.stain_estimation="per_image"``
-    restores the old behaviour for anything that needs it.
+    restores the old behavior for anything that needs it.
 
     *exclude_um* is a list of closed polygons, in microns from the top-left,
     taken **out** of the tissue before anything is measured -- a fold, a tear,
@@ -474,7 +474,7 @@ def _mark_lesions(ax, lesions, px_um, rotation_deg, src_shape, dst_shape,
     if not lesions:
         return
     # The picture may have been turned for the page; rotate the marks with it
-    # about the image centre, the same way scipy.ndimage.rotate does.
+    # about the image center, the same way scipy.ndimage.rotate does.
     th = np.deg2rad(rotation_deg)
     cs, sn = np.cos(th), np.sin(th)
     cx0, cy0 = src_shape[1] / 2.0, src_shape[0] / 2.0
@@ -602,7 +602,7 @@ def plot_fibrosis(
     ov[fib_v] = (0.05, 0.35, 0.95, 0.80)
     ax_cls.imshow(ov)
     # Lesions marked, not drawn over.  An outline traces the thing you are
-    # trying to look at, and a coloured one puts a second stain on a section
+    # trying to look at, and a colored one puts a second stain on a section
     # that already has two.  A small white arrowhead above each lesion points
     # at it and covers nothing; the shapes themselves are on the editor
     # canvas, where there is room to look at them.
@@ -728,13 +728,15 @@ def save_results(res: FibrosisResult, out_dir: str | Path, name: str = "fibrosis
     fig.savefig(out_dir / f"{name}_figure.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
     paths["figure"] = str(out_dir / f"{name}_figure.png")
-    # Real <text>, not every glyph traced out as its own curve, so the labels
-    # stay editable in a vector editor.
-    with plt.rc_context({"svg.fonttype": "none"}):
+    # PDF, not SVG -- see save_cohort_plot in cohort.py.  `fonttype: 42`
+    # embeds the outlines rather than tracing each glyph as a curve, so the
+    # labels stay editable text.  `svg=True` still names the flag: it means
+    # "drawn for a vector backend", and PDF is one.
+    with plt.rc_context({"pdf.fonttype": 42}):
         fig = plot_fibrosis(res, title=title, organ=organ, svg=True, **style)
-        fig.savefig(out_dir / f"{name}_figure.svg", bbox_inches="tight")
+        fig.savefig(out_dir / f"{name}_figure.pdf", bbox_inches="tight")
         plt.close(fig)
-    paths["figure_svg"] = str(out_dir / f"{name}_figure.svg")
+    paths["figure_pdf"] = str(out_dir / f"{name}_figure.pdf")
 
     # A picture to draw regions on, not a second copy of the data: the working
     # image can be eight thousand pixels across and the editor shows it in a

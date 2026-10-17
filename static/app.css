@@ -3,13 +3,13 @@
  * The palette, the buttons, the inputs, the tabs, the tables, the file dialog
  * and the plotting panel all come from labkit.css, which is loaded first.
  * Anything below is here because it describes *this* tool's layout: a fixed
- * side panel, a full-bleed canvas, and the tile-quality colours the canvas
+ * side panel, a full-bleed canvas, and the tile-quality colors the canvas
  * draws with.
  */
 
-/* The canvas reads these by name from JS (see COLOURS in app.js), so they are
-   aliased onto labkit's quality ramp rather than restated.  Grey-to-red: a
-   tile with nothing wrong with it stays calm and only trouble is coloured.
+/* The canvas reads these by name from JS (see COLORS in app.js), so they are
+   aliased onto labkit's quality ramp rather than restated.  Gray-to-red: a
+   tile with nothing wrong with it stays calm and only trouble is colored.
    White is reserved for what you have selected, which is a statement about
    you and not about the tile. */
 :root {

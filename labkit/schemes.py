@@ -1,5 +1,5 @@
 """
-Named colour schemes, saved once and offered by every one of these apps.
+Named color schemes, saved once and offered by every one of these apps.
 
 A scheme is a flat ``{series name: "#rrggbb"}`` map -- exactly what
 :attr:`labkit.plots.PlotSpec.colours` holds -- kept under
@@ -44,7 +44,7 @@ def _file(name: str) -> Path:
 
 
 def clean(colours: dict | None) -> dict[str, str]:
-    """The colours worth storing: string keys, hex values, nothing else."""
+    """The colors worth storing: string keys, hex values, nothing else."""
     out = {}
     for key, value in (colours or {}).items():
         value = str(value).strip()
@@ -129,7 +129,7 @@ def flask_blueprint(name: str = "labkit_schemes", url: str = "/api/colour_scheme
 
 if __name__ == "__main__":
     # The check: a name that tries to climb out of the directory does not, and
-    # a colour that is not one never reaches a figure.
+    # a color that is not one never reaches a figure.
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         DIR = Path(tmp) / "schemes"

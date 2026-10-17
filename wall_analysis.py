@@ -3,16 +3,16 @@ wall_analysis.py -- straighten a vessel wall and quantify what is in it.
 
 Given a stitched (or single-field) trichrome image of a vessel, this module
 
-1.  separates the stains into *concentrations* by colour deconvolution rather
+1.  separates the stains into *concentrations* by color deconvolution rather
     than guessing from hue,
-2.  finds the muscular media and traces its centre line,
+2.  finds the muscular media and traces its center line,
 3.  unrolls the wall into a straight ribbon: arc length along x, depth through
     the wall along y,
 4.  reports how much collagen there is **per unit length of wall**, cumulatively
     along the vessel, and how much blue staining sits *inside the muscle layer*
     as opposed to in the adventitia around it.
 
-Why concentrations rather than colours
+Why concentrations rather than colors
 --------------------------------------
 Transmitted light through a stained section follows Beer-Lambert: optical
 density is linear in the amount of dye, RGB intensity is not.  A hue-and-
@@ -139,7 +139,7 @@ def edt(mask: np.ndarray) -> np.ndarray:
 
 
 # -- scikit-image compatibility ----------------------------------------------
-# 0.26 deprecated `min_size` / `area_threshold` in favour of a keyword-only
+# 0.26 deprecated `min_size` / `area_threshold` in favor of a keyword-only
 # `max_size`, and the two do *not* mean the same thing: `min_size=n` dropped
 # components smaller than n, `max_size=n` drops components of n or smaller.
 # Passing the old number straight through to the new keyword would therefore
@@ -197,7 +197,7 @@ def fill_small_holes(mask: np.ndarray, area_threshold) -> np.ndarray:
 DEFAULT_STAINS = {
     "muscle": np.array([0.30, 0.75, 0.58]),    # Biebrich scarlet / acid fuchsin
     "collagen": np.array([0.72, 0.55, 0.18]),  # aniline blue
-    "nuclei": np.array([0.55, 0.60, 0.58]),    # Weigert's haematoxylin
+    "nuclei": np.array([0.55, 0.60, 0.58]),    # Weigert's hematoxylin
 }
 
 
@@ -264,7 +264,7 @@ def estimate_stains(
 
     Using the covariance -- not the raw SVD of the OD matrix -- matters.  Every
     optical density is positive, so the first singular vector of the uncentred
-    data is just the mean colour and the angular spread around it collapses to
+    data is just the mean color and the angular spread around it collapses to
     nothing; the two "stain vectors" then come back nearly identical and the
     deconvolution is singular.
 
@@ -314,7 +314,7 @@ def separate_stains(od: np.ndarray, stain_matrix: np.ndarray) -> np.ndarray:
 
 
 # =============================================================================
-# 2.  Geometry: tissue, media, centre line
+# 2.  Geometry: tissue, media, center line
 # =============================================================================
 
 
@@ -332,7 +332,7 @@ class WallParams:
     smooth_centerline_um: float = 100.0
     arc_step_um: float = 1.0           # sampling step along the wall
     recentre_passes: int = 2           # move the sampling curve onto the mid-wall line
-    recentre_smooth_um: float = 20.0   # smoothing applied to the re-centred curve
+    recentre_smooth_um: float = 20.0   # smoothing applied to the re-centered curve
     max_depth_um: float = 260.0        # half-width of the sampled band
     depth_step_um: float = 0.5
     boundary_smooth_um: float = 30.0
@@ -555,9 +555,9 @@ def _band_centre_offsets(
 
     Only the band a point actually borders may claim it.  The walk stops at the
     first sample outside the mask, so a second wall further along the normal --
-    the far side of a branch, the neighbouring vessel in the same section --
+    the far side of a branch, the neighboring vessel in the same section --
     cannot capture the point.  Where the normal never crosses muscle at all the
-    offset is NaN, for the caller to fill from its neighbours.
+    offset is NaN, for the caller to fill from its neighbors.
     """
     n_steps = max(2, int(round(reach_px / step_px)) + 1)
     t = (np.arange(n_steps, dtype=np.float64) * step_px)[None, :]
@@ -595,7 +595,7 @@ def _outline_and_normals(lumen: np.ndarray, min_points: int = 16):
     if len(xy) > 4 and np.allclose(xy[0], xy[-1]):
         xy = xy[:-1]
     if len(xy) < min_points:
-        raise ValueError("The lumen outline is too short to analyse.")
+        raise ValueError("The lumen outline is too short to analyze.")
 
     k = max(3, int(len(xy) / 200) | 1)
     sm = np.column_stack([
@@ -622,7 +622,7 @@ def wall_around_lumen_um(mask: np.ndarray, lumen: np.ndarray, px_um: float) -> f
     Every hole in the media mask is enclosed by media, by construction, so
     "is it surrounded by wall" says nothing.  How *much* wall does: a vessel is
     ringed by a media of some real thickness, while a hole left by a segmentation
-    artefact is ringed by a sliver a pixel or two wide.  Measured the same way
+    artifact is ringed by a sliver a pixel or two wide.  Measured the same way
     the trace is placed -- outwards along each normal to the ridge of the
     distance transform -- and reported as a median so a fold or a branch at one
     point cannot carry the answer.
@@ -649,7 +649,7 @@ def _lumen_contour_centerline(
 
     The outline of the lumen is a closed curve that is already in order, which
     is the property the skeleton of a real wall band does not have: dense smooth
-    muscle skeletonises into a mesh of small loops and junctions (here, 482
+    muscle skeletonizes into a mesh of small loops and junctions (here, 482
     degree-3 nodes around one aorta), and no longest-path rule recovers the
     circumference from that.  The outline is then pushed outwards onto the
     middle of the media, point by point, so sampling lines start in the wall
@@ -662,7 +662,7 @@ def _lumen_contour_centerline(
     off = _band_centre_offsets(dt, sm, nx, ny, reach)
     if not np.isfinite(off).any():
         # No normal crossed muscle anywhere: fall back to the old single number
-        # rather than fail, and let the re-centring pass sort it out.
+        # rather than fail, and let the re-centering pass sort it out.
         off = np.full(len(sm), float(np.percentile(dt[mask], 97.0)) if mask.any() else 1.0)
     else:
         off = _fill_nan_1d(off)
@@ -800,7 +800,7 @@ def wall_pieces(
     stitched, or a ring whose band simply never closed at the muscle threshold
     -- is an open arc, and an arc has no hole to be found by.  So the arcs are
     enumerated by the only thing left: they are the connected pieces of the
-    band.  Without this the whole band is skeletonised as one and the longest
+    band.  Without this the whole band is skeletonized as one and the longest
     path wins, so a section holding two vessels reports one -- and not
     necessarily the larger, since that walk starts from whichever skeleton
     endpoint the raster reached first.  One real aortic arch section, two rings
@@ -887,7 +887,7 @@ def centerline_from_mask(
 
     # Past the rings come the open arcs, one per piece of band that encloses
     # nothing (:func:`wall_pieces`), and each is traced on *its own piece*.
-    # Skeletonising the whole band instead lets the two vessels in one section
+    # Skeletonizing the whole band instead lets the two vessels in one section
     # compete for a single longest path, which only one of them can win.
     if arcs is None:
         arcs = [] if lumina else [mask]      # nothing said: the band is one arc
@@ -903,7 +903,7 @@ def centerline_from_mask(
     skel = _branch_prune(skel, max(3, int(prune_px)))
     coords, nbrs = _skeleton_graph(skel)
     if len(coords) < 10:
-        raise ValueError("The wall centre line is too short to analyse.")
+        raise ValueError("The wall center line is too short to analyze.")
     deg = np.array([len(v) for v in nbrs])
     ends = np.where(deg == 1)[0]
     if len(ends) == 0:
@@ -938,7 +938,7 @@ def centerline_from_mask(
     # the media mask, `binary_fill_holes` then found no lumen at all, and a
     # 7.2 mm ring was measured as an open arc.  It is also why the same section
     # came out closed from one render of the mosaic and open from another: the
-    # streak sits on the threshold, so the answer followed the quantisation
+    # streak sits on the threshold, so the answer followed the quantization
     # rather than the specimen.
     #
     # Distance alone cannot settle it, because a ring with a small tear and an
@@ -946,7 +946,7 @@ def centerline_from_mask(
     # and a genuinely open 350-degree arc give endpoint gaps of 5 % and 3 % of
     # the perimeter, in the wrong order.  What separates them is not how far
     # apart the ends are but *what lies between them* -- the wall carries on
-    # through a staining artefact and stops at a real opening.  So the gap is
+    # through a staining artifact and stops at a real opening.  So the gap is
     # crossed and the tissue is read along it, and the ring is closed only if
     # the tissue never runs out; `tissue` is the section, not the muscle
     # threshold that just failed, so a streak the muscle mask lost is still
@@ -977,7 +977,7 @@ def traced_band_mask(
     outer_um: np.ndarray,
     px_um: float,
 ) -> np.ndarray:
-    """Rasterise the strip of wall that the straightening actually measured."""
+    """Rasterize the strip of wall that the straightening actually measured."""
     inner_px = np.nan_to_num(inner_um) / max(px_um, 1e-9)
     outer_px = np.nan_to_num(outer_um) / max(px_um, 1e-9)
     p_in = centerline_xy + normals_xy * inner_px[:, None]
@@ -1022,13 +1022,13 @@ def find_branch_nodes(
     thickened wall is the thing one would be looking for in a diseased vessel and
     must not be mistaken for a junction.
 
-    The test is what is left over.  Rasterise the strip that was actually
+    The test is what is left over.  Rasterize the strip that was actually
     measured, subtract it from the media mask, and see whether any substantial
     piece of wall remains attached: at a fork the branch's own wall is media that
     the traced strip never covered, while a merely thick wall is entirely inside
     it and leaves nothing behind.
 
-    (Skeletonising the media and looking for degree-three nodes is the textbook
+    (Skeletonizing the media and looking for degree-three nodes is the textbook
     answer and does not work here.  A wall band is tens of microns thick, so its
     skeleton is a mesh of small loops: on a plain thoracic ring with no branch at
     all that test reported 182 forks.)
@@ -1098,7 +1098,7 @@ def resample_centerline(
     keep = np.r_[True, np.diff(d) > 1e-6]
     xy, d = xy[keep], d[keep]
     if len(xy) < 8:
-        raise ValueError("Centre line too short after cleaning.")
+        raise ValueError("Center line too short after cleaning.")
     per = 1 if closed else 0
     if closed and (abs(xy[0, 0] - xy[-1, 0]) > 1e-6 or abs(xy[0, 1] - xy[-1, 1]) > 1e-6):
         xy = np.vstack([xy, xy[:1]])
@@ -1219,7 +1219,7 @@ def _bilinear(plane: np.ndarray, ys: np.ndarray, xs: np.ndarray) -> np.ndarray:
     An RGB *plane* is sampled in one pass rather than three.  The corner
     arithmetic is the same for every channel, and the three values of a pixel
     sit next to each other in memory, so one gather of three is most of a
-    section's colour sampling for the price of one channel's.
+    section's color sampling for the price of one channel's.
     """
     h, w = plane.shape[:2]
     inside = (ys >= 0) & (ys <= h - 1) & (xs >= 0) & (xs <= w - 1)
@@ -1281,7 +1281,7 @@ def _muscle_centre_um(band_muscle: np.ndarray, depths_um: np.ndarray,
     Where the muscle is, along each sampling line -- a target for a curve that
     has fallen off the wall.
 
-    The re-centring pass aims at the midpoint between the wall edges, which is
+    The re-centering pass aims at the midpoint between the wall edges, which is
     the right target while the curve is on the wall and no target at all once it
     is not: with no muscle underneath it the edge finder reports a band a few
     microns thick, the correction is refused as implausible, and the curve stays
@@ -1351,7 +1351,7 @@ def find_wall_edges(
     patch inside the media ends the media at the patch, so the lesion is
     measured as adventitia and the wall is reported thin.  On this thoracic
     aorta, at a patch where collagen/muscle reaches 1.25 against the vessel's
-    own 0.64, the edge lands 15 um inside a media whose neighbours are 31 um
+    own 0.64, the edge lands 15 um inside a media whose neighbors are 31 um
     thick.  The more collagen a stretch has, the less of it is counted.
 
     ``muscle-end`` ends the media where the **muscle runs out**: the first
@@ -1814,11 +1814,11 @@ def lumen_side_per_position(
     if scale > 0 and decided.any() and not decided.all():
         idx = np.arange(len(diff), dtype=float)
         # Binary values, so linear interpolation between the decided positions
-        # and a cut at a half is nearest-neighbour fill.
+        # and a cut at a half is nearest-neighbor fill.
         vote = (np.interp(idx, idx[decided], vote[decided]) > 0.5).astype(float)
     n = max(3, int(round(window_um / max(arc_step_um, 1e-6))) | 1)
     # A closed vessel wraps, so the filter must too -- otherwise the seam where
-    # the ring was cut open votes against its own neighbours and a few positions
+    # the ring was cut open votes against its own neighbors and a few positions
     # come out inside out on a wall that never turns anywhere.
     return ndi.median_filter(vote, size=n, mode="wrap" if closed else "nearest") > 0.5
 
@@ -1915,11 +1915,11 @@ def analyze_wall(
 
     *guide_um* replaces the automatic reference curve with one drawn by hand,
     in microns from the top-left of the image.  It does not have to be accurate:
-    everything downstream is unchanged, so the re-centring pass pulls a rough
+    everything downstream is unchanged, so the re-centering pass pulls a rough
     line onto the middle of the media exactly as it does the automatic one.  It
     is for the cases no rule gets right -- which of two touching vessels to
     follow, whether to go up a branch or past it, where a torn wall ought to be
-    joined -- and those are judgements about the specimen rather than defects in
+    joined -- and those are judgments about the specimen rather than defects in
     the tracer.
     """
     p = params or WallParams()
@@ -2031,8 +2031,8 @@ def analyze_wall(
         """
         The three stain bands the edge finder reads.
 
-        Not the colour band: that is looked at once, at the end, and the
-        re-centring passes decide where the wall is without it, so carrying it
+        Not the color band: that is looked at once, at the end, and the
+        re-centering passes decide where the wall is without it, so carrying it
         round the loop would sample twenty million points twice for nothing.
         """
         return (sample_band(muscle, curve, normals, depths_px),
@@ -2062,17 +2062,17 @@ def analyze_wall(
     # ---- put the sampling curve down the middle of the wall --------------
     #
     # The first curve comes from the lumen outline pushed out by a constant
-    # offset, so where the wall thins or thickens it sits off-centre -- on this
+    # offset, so where the wall thins or thickens it sits off-center -- on this
     # aorta by up to 20 um, against a media 41 um thick.  Unrolling about a curve
     # that is not the middle of the band makes the distortion lopsided and, at
     # tight bends, pushes one edge past the point where the sampling lines cross.
-    # Re-centring on the measured mid-wall line and sampling again fixes both,
+    # Re-centering on the measured mid-wall line and sampling again fixes both,
     # and costs one extra pass.
     for _ in range(max(0, int(p.recentre_passes))):
         mid = (inner + outer) / 2.0
         if not np.isfinite(mid).any():
             break
-        # Re-centre only where the thing measured is plausibly a wall.
+        # Re-center only where the thing measured is plausibly a wall.
         #
         # At a branch the two walls merge and the edge finder reports a "media"
         # hundreds of microns thick; its midpoint is inside the blob, nowhere
@@ -2114,7 +2114,7 @@ def analyze_wall(
                                      p.recentre_smooth_um / work_px_um, closed)
         except Exception:
             break
-        # Re-centring re-derives the curve, so it has a different number of
+        # Re-centering re-derives the curve, so it has a different number of
         # points; the orientation is decided again on the new one rather than
         # carried over.
         _t, base_nrm = tangents_normals(xy, closed)
@@ -2176,14 +2176,14 @@ def analyze_wall(
     # sections when it is derived from each section separately -- and it has to
     # be, because staining intensity varies between slides.  Worse, collagen
     # inside the media is unimodal, so Otsu has nothing to lock onto: on one
-    # thoracic section, re-centring the sampling curve moved the collagen
+    # thoracic section, re-centering the sampling curve moved the collagen
     # percentiles by under 0.02 but moved Otsu from 0.778 to 0.632, and with it
     # the reported fibrosis from 9 % to 34 %.  A per-pixel comparison of the two
     # stains has none of that: it is invariant to overall staining intensity and
     # means the same thing on every slide.
     #
     # Set `blue_threshold` to a number for the classical absolute-threshold
-    # index; `blue_rule="absolute"` with None reproduces the old Otsu behaviour
+    # index; `blue_rule="absolute"` with None reproduces the old Otsu behavior
     # and its instability.
     blue_thr = p.blue_threshold
     rule = p.blue_rule
@@ -2207,7 +2207,7 @@ def analyze_wall(
     blue_line = line_integral(band_collagen, media_band)
     blue_adv_line = line_integral(band_collagen, adventitia)
 
-    # Collagen normalised to muscle.  Dividing by a muscle integral that is
+    # Collagen normalized to muscle.  Dividing by a muscle integral that is
     # essentially zero does not give a large ratio, it gives an undefined one:
     # there is no media at that position to integrate through.  The floor is a
     # fraction of the section's own muscle level, so it carries no absolute
@@ -2240,7 +2240,7 @@ def analyze_wall(
     t_med_final = float(np.nanmedian(thickness))
     too_thick = ~(np.isfinite(thickness) & (thickness < p.max_thickness_factor * t_med_final))
 
-    # And the same judgement the other way round.  A stretch measuring a few
+    # And the same judgment the other way round.  A stretch measuring a few
     # microns of media is not a thin wall, it is no wall: either the curve is
     # beside it or there is a real gap in the band.  Counting it kept the
     # length in the denominator of every per-length readout while contributing
@@ -2309,7 +2309,7 @@ def analyze_wall(
     # on the aortic arch this is the difference between excluding 37 um of a
     # 400 um junction and excluding the junction.  Away from any fork the strict
     # test still stands, because there a thick wall is a finding, not an
-    # artefact.
+    # artifact.
     junction = near_branch & np.isfinite(thickness) & (thickness > 1.5 * t_med_final)
     at_branch = (too_thick | junction) & near_branch & ~no_data
     thickened = too_thick & ~near_branch & ~no_data
@@ -2397,7 +2397,7 @@ def analyze_wall(
 
     # `side` is a vote, not a measurement, and it is free to vote wrong without
     # a branch anywhere nearby: on a stretch where both directions carry some
-    # tissue -- a fold, a vessel pressed against its neighbour, a smear of
+    # tissue -- a fold, a vessel pressed against its neighbor, a smear of
     # stain -- the near/far optical density comparison can settle on the wrong
     # answer for a couple hundred microns and the 250 um median filter is wide
     # enough to hold that wrong answer steady rather than average it out. A
@@ -2470,7 +2470,7 @@ def analyze_wall(
     # Cut the wall where it stops being one continuous piece.  A branch is not a
     # place where the wall carries on: the traced path goes into the junction and
     # comes out on the other wall, so distance measured straight through it joins
-    # two stretches that are not neighbours, and the depth axis turns over with
+    # two stretches that are not neighbors, and the depth axis turns over with
     # the path.  Cutting there makes the discontinuity explicit instead of
     # drawing a curve across it.
     turned = np.zeros_like(at_branch)
@@ -2535,7 +2535,7 @@ def analyze_wall(
         "collagen_od_um": blue_line,       # integrated collagen stain per unit length
         "collagen_adventitia_od_um": blue_adv_line,
         "collagen_fraction_of_stain": frac_line,
-        # Collagen normalised to muscle.  Both are integrated through the same
+        # Collagen normalized to muscle.  Both are integrated through the same
         # thickness, so the thickness divides out -- which is the whole point.
         "collagen_to_muscle": ratio_line,
         "collagen_area_fraction": blue_area_frac,
@@ -2619,7 +2619,7 @@ def analyze_wall(
     # whether or not that position is trustworthy -- it has no way to know.
     # A position `cut` above (a junction, an unsupported flip, a gap) is
     # rescaled from edges that are wrong or meaningless, and rescaling does
-    # not make a wrong edge more correct, only harder to recognise as wrong:
+    # not make a wrong edge more correct, only harder to recognize as wrong:
     # the absolute-depth view still shows the true image behind a bad edge,
     # but the rectangle view shows only where that edge said the wall was.
     # Blanking it here keeps the two views, and the mean profile below that
@@ -2650,7 +2650,7 @@ def analyze_wall(
     # ---- totals ---------------------------------------------------------
     # Totals are taken over the stretches that are actually wall.  On the aortic
     # arch the branch junction is 4.5 % of the traced length and carries enough
-    # collagen to lift the per-millimetre figure by 40 %; including it silently
+    # collagen to lift the per-millimeter figure by 40 %; including it silently
     # would make an arch and a thoracic section incomparable, since only the arch
     # has a branch in the frame.  Set `exclude_non_wall=False` to include it.
     L = float(keep.sum()) * ds
@@ -2899,7 +2899,7 @@ def straight_view(res: WallResult, pad_um: float = 60.0) -> np.ndarray:
 
 def rectangular_view(res: WallResult, what: str = "rgb") -> np.ndarray:
     """
-    The wall with its thickness normalised away: a true rectangle.
+    The wall with its thickness normalized away: a true rectangle.
 
     Rows are depth through the wall (0 = luminal surface, 1 = media/adventitia
     junction) and columns are distance along the vessel.  This is the view for
@@ -2984,7 +2984,7 @@ def _map_layout(res: "WallResult", overview_rgb: np.ndarray, rotation_deg: float
     is taller than it is wide the whole thing is turned a quarter turn first.
     `rotation_deg` turns it further still, on top of that automatic quarter
     turn rather than instead of it, so the number in the box always means "how
-    far from what you're already looking at."  Returns the image, the centre
+    far from what you're already looking at."  Returns the image, the center
     line, the branch marks and the crop box, all in the same (possibly
     rotated) frame.
     """
@@ -3042,7 +3042,7 @@ def draw_traced_wall(
     Show the section with the traced wall drawn on it, marked where the
     straightened strip starts and stops.
 
-    The line is drawn thin, white and dashed, and dotted at whole millimetres
+    The line is drawn thin, white and dashed, and dotted at whole millimeters
     with the same numbers as the panels below.  Thin and dashed because the
     picture underneath is the thing being judged when fibrosis is scored by
     eye, and a fat opaque curve lying along the wall hides the very tissue the
@@ -3067,7 +3067,7 @@ def draw_traced_wall(
     ax.set_xlim(x0, x1)
     ax.set_ylim(y1, y0)   # imshow puts the origin at the top
 
-    # One stroke colour, so the raster and the vector are now the same drawing:
+    # One stroke color, so the raster and the vector are now the same drawing:
     # the SVG used to trade the arc-length rainbow for a single selectable
     # <path>, and with a plain dash there is nothing left to trade.
     if show_trace:
@@ -3075,7 +3075,7 @@ def draw_traced_wall(
                 linestyle=TRACE_DASH, solid_joinstyle="round",
                 solid_capstyle="round")
 
-    # Whole-millimetre marks, so a position in the strip can be found again here.
+    # Whole-millimeter marks, so a position in the strip can be found again here.
     if tick_mm > 0:
         marks = np.arange(0.0, arc_mm[-1] + 1e-9, tick_mm)
         idx = np.searchsorted(arc_mm, marks)
@@ -3098,7 +3098,7 @@ def draw_traced_wall(
         ax.plot(lx, ly - 3.4 * arrow_ms, marker="v", ms=arrow_ms, mfc="white",
                 mec="#1a1a1a", mew=1.1, zorder=8, linestyle="none")
 
-    # Start and end in the same white-and-black as the millimetre marks.  A
+    # Start and end in the same white-and-black as the millimeter marks.  A
     # green dot and a red square told you which end was which by hue, and hue
     # on top of a trichrome is the one thing that cannot be spared: red and
     # green markers sit on a red-and-blue section and read as tissue.  Shape
@@ -3119,7 +3119,7 @@ def draw_traced_wall(
 
 
 # `plt_norm` and `arc_colormap` lived here.  They existed to run a rainbow
-# along the traced wall by colouring every segment separately; the trace is
+# along the traced wall by coloring every segment separately; the trace is
 # now one thin white dash so the tissue under it stays readable while
 # fibrosis is scored by eye, and nothing else ever used them.
 
@@ -3181,7 +3181,7 @@ def plot_rectangular(
     which answer different questions and disagree wherever the wall changes
     thickness.
 
-    The bottom panel is collagen *normalised to muscle*.  Both stains are
+    The bottom panel is collagen *normalized to muscle*.  Both stains are
     integrated through the same wall, so thickness divides out and a rise means
     a genuinely more collagenous wall rather than a thicker one.
     """
@@ -3278,7 +3278,7 @@ def plot_rectangular(
     if show_grid:
         ax_pum.grid(alpha=0.25)
 
-    # ---- thickness-normalised -------------------------------------------
+    # ---- thickness-normalized -------------------------------------------
     ax_rel = fig.add_subplot(gs[row + 1, 0], sharex=ax_um)
     ext = _rect_extent(res)
     ax_rel.imshow(restain(rectangular_view(res, "rgb"), res.stain_matrix, stain_gain),
@@ -3286,7 +3286,7 @@ def plot_rectangular(
     ax_rel.axhline(0.0, color="k", lw=0.8, ls="--")
     ax_rel.axhline(1.0, color="k", lw=0.8, ls="--")
     ax_rel.set_ylabel("Depth through the media\n(0 = lumen, 1 = adventitia)", fontsize=fs_label)
-    ax_rel.set_title("Wall unrolled, thickness-normalised", fontsize=fs_title)
+    ax_rel.set_title("Wall unrolled, thickness-normalized", fontsize=fs_title)
     ax_rel.grid(False)
     ax_rel.tick_params(labelbottom=False, labelsize=fs_tick)
 
@@ -3316,7 +3316,7 @@ def plot_rectangular(
     ax_col.grid(False)
     ax_col.tick_params(labelbottom=False, labelsize=fs_tick)
 
-    # thickness against the normalised readout, on the counted stretches
+    # thickness against the normalized readout, on the counted stretches
     ax_reg = fig.add_subplot(gs[row + 2, 1])
     x = prof.media_thickness_um.values[_counted]
     y = prof.collagen_od_um.values[_counted]
@@ -3351,7 +3351,7 @@ def plot_rectangular(
     if show_grid:
         ax_reg.grid(alpha=0.25)
 
-    # ---- collagen per unit length, normalised to muscle ------------------
+    # ---- collagen per unit length, normalized to muscle ------------------
     # Raw collagen per unit length tracks thickness almost perfectly (r ~ 0.97),
     # which is arithmetic, not biology: a thicker wall has more of everything.
     # Dividing by muscle integrated through the same wall cancels it.
@@ -3378,7 +3378,7 @@ def plot_rectangular(
         ax_loc.grid(alpha=0.25)
 
     # ---- flagged stretches, on every panel that runs along the wall -----
-    # Shading with no key is a colour code only the person who wrote it can
+    # Shading with no key is a color code only the person who wrote it can
     # read; the legend is built from whichever of these actually appear in
     # this trace; rather than every possible flag every time, so it says
     # exactly what's shaded here rather than what could be.
@@ -3402,7 +3402,7 @@ def plot_rectangular(
                            color=colour, alpha=0.16, zorder=0, lw=0)
         flag_handles.append(Patch(color=colour, alpha=0.4, label=label))
     # Where the wall is cut, say so with a hard line: the two sides are not
-    # neighbours on the vessel and nothing should be read across the join.
+    # neighbors on the vessel and nothing should be read across the join.
     if "segment" in prof:
         seg = prof.segment.values
         edges = np.flatnonzero(np.diff(seg)) if len(seg) > 1 else []
@@ -3418,7 +3418,7 @@ def plot_rectangular(
     ax_um.set_xlim(0, arc_mm[-1])
 
     # One legend for the whole stack: local/running/whole-wall (from ax_loc's
-    # own labelled lines) plus whatever's shaded above, so what a colour or a
+    # own labeled lines) plus whatever's shaded above, so what a color or a
     # line means is answered once rather than guessed at on every panel.
     handles, _labels = ax_loc.get_legend_handles_labels()
     ax_loc.legend(handles=handles + flag_handles, fontsize=fs_note,
@@ -3501,12 +3501,12 @@ def save_results(res: WallResult, out_dir: str | Path, name: str = "wall",
     fig = plot_rectangular(res, overview_rgb=overview_rgb)
     fig.savefig(out_dir / f"{name}_rectangular_channels.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
-    fig_svg = plot_rectangular(res, overview_rgb=overview_rgb, svg=True)
-    with plt.rc_context({"svg.fonttype": "none"}):
-        fig_svg.savefig(out_dir / f"{name}_rectangular_channels.svg", bbox_inches="tight")
-    plt.close(fig_svg)
+    fig_vec = plot_rectangular(res, overview_rgb=overview_rgb, svg=True)
+    with plt.rc_context({"pdf.fonttype": 42}):
+        fig_vec.savefig(out_dir / f"{name}_rectangular_channels.pdf", bbox_inches="tight")
+    plt.close(fig_vec)
     paths["rectangular_channels"] = str(out_dir / f"{name}_rectangular_channels.png")
-    paths["rectangular_channels_svg"] = str(out_dir / f"{name}_rectangular_channels.svg")
+    paths["rectangular_channels_pdf"] = str(out_dir / f"{name}_rectangular_channels.pdf")
     _savez_fast(
         out_dir / f"{name}_maps.npz",
         straight_rgb=res.straight_rgb.astype(np.float16),

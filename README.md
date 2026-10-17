@@ -104,7 +104,7 @@ Point the app at a folder, press **Auto-stitch**, then deal with whatever is lef
 |---|---|
 | drag a tile | move it |
 | **shift**+drag, or **I** then drag | move its whole island |
-| **A** | align the selection against its neighbours |
+| **A** | align the selection against its neighbors |
 | **shift+A** | align everything |
 | **L** | lock — locked tiles are never moved again, by anything |
 | **[** **]** | rotate (with **shift**, 5° steps) |
@@ -116,7 +116,7 @@ Point the app at a folder, press **Auto-stitch**, then deal with whatever is lef
 | **⌘Z** / **ctrl+Z** | undo · **⇧⌘Z** or **ctrl+Y** redo |
 
 **Selecting several pieces.** The rectangle takes every tile it touches; the lasso takes
-every tile whose centre or a corner falls inside the loop, because a lasso is thrown round a
+every tile whose center or a corner falls inside the loop, because a lasso is thrown round a
 cluster rather than traced along tile edges. Tick *take only fully enclosed tiles* when you
 mean exactly the pieces inside the line. **shift** adds to the selection and **alt**
 subtracts, so a rough sweep can be corrected instead of redrawn; pressing an
@@ -131,10 +131,10 @@ nudges collapse into one step so a held arrow key does not bury the history.
 
 **Drag, then align.** You supply the topology — which piece belongs roughly where, the part
 software gets wrong on self-similar tissue. Correlation then supplies the last few pixels,
-the part people get wrong. After a drag, the tile is re-matched against its new neighbours
+the part people get wrong. After a drag, the tile is re-matched against its new neighbors
 within a small radius of where you dropped it, so your decision is refined and never
 overruled. A test: displacing a placed field by 150 × −120 px and pressing **A** returns it
-to within **0.07 px**, on five neighbour votes at correlation 0.95–0.96.
+to within **0.07 px**, on five neighbor votes at correlation 0.95–0.96.
 
 Dragging a whole island and pressing **A** aligns it as a **rigid body** — every member that
 touches something outside votes on one common shift and the weighted median is applied to
@@ -155,7 +155,7 @@ merging is a claim that two pieces are one, and it stays with **A**, made delibe
 rather than happening as a side effect of tidying up.
 
 **Merge selected islands** is that deliberate claim, made by hand. Automatic
-merging is a judgement — **A** joins an island only when the settled result
+merging is a judgment — **A** joins an island only when the settled result
 contradicts nothing, and the suggestion panel offers a shift it worked out
 itself — and neither can help when the evidence is genuinely ambiguous and you
 can nonetheless see where the piece belongs. Select a tile in each piece and
@@ -171,7 +171,7 @@ island** to move a piece bodily, arrow keys nudge a pixel at a time (twenty
 with **shift**), and **Settle islands** takes it from roughly right to
 pixel-right. The usual order is drag, settle, then merge.
 
-Tile borders are coloured by how well each field agrees with its neighbours in the finished
+Tile borders are colored by how well each field agrees with its neighbors in the finished
 layout; red lines join fields that contradict each other.
 
 ### Island merge suggestions
@@ -186,14 +186,14 @@ occupied by fields 7136–7176, with 59,606 px of agreeing tissue behind the cla
 
 ## The wall analysis
 
-Everything is measured on **stain concentrations** from colour deconvolution, with the stain
+Everything is measured on **stain concentrations** from color deconvolution, with the stain
 vectors estimated from the section itself (Macenko). Optical density is linear in dye
 amount, so it can be integrated over distance; a hue-and-saturation score cannot, because it
 confounds how much dye is present with how dark the field was.
 
 The media is segmented from the muscle-stain concentration, the lumen outline provides a
 closed reference curve, and the image is resampled onto (distance along the wall × depth
-through the wall). That curve is then **re-centred on the measured middle of the wall** and
+through the wall). That curve is then **re-centered on the measured middle of the wall** and
 the wall sampled again.
 
 Two things keep the curve on the muscle, and both had to be there:
@@ -206,7 +206,7 @@ Two things keep the curve on the muscle, and both had to be there:
   have merged. On the aortic arch it gave 60 µm against a wall whose own half-thickness is
   28: the starting curve began outside its own media at 93 % of positions, and a constant
   offset of a concave outline also loops back on itself at every branch mouth.
-* **Re-centring can recover.** Its usual target is the midpoint between the measured wall
+* **Re-centering can recover.** Its usual target is the midpoint between the measured wall
   edges, which is the right target while the curve is on the wall and no target at all once
   it is not — with no muscle underneath, the edge finder reports a band a few microns thick
   and the correction is refused as implausible. The peak of the muscle profile is a target
@@ -218,7 +218,7 @@ Two things keep the curve on the muscle, and both had to be there:
 Together these take arch sec4 from 64 % of positions on the muscle band to **100 %**, with
 the measured thickness agreeing with the segmentation to 4 % (55 µm against 57 µm). On a
 plain thoracic ring, where the old curve was already right, nothing moves by more than
-0.3 %. Re-centring also takes the off-centre error on the thoracic aorta from 8.5 µm RMS to
+0.3 %. Re-centering also takes the off-center error on the thoracic aorta from 8.5 µm RMS to
 3.0 µm and the folded fraction of the wall to zero.
 
 A stretch that still measures no wall is not counted as one. Three things are flagged and
@@ -261,7 +261,7 @@ was reporting a local collagen ÷ muscle of 13 against a vessel whose own is 0.3
 | `collagen_od_um2_per_mm_all_traced` | OD·µm²/mm | the per-length figure with nothing excluded |
 | `n_branches` / `n_lumina` | count | forks found on this wall; vessels in the frame |
 
-### Normalise collagen to muscle
+### Normalize collagen to muscle
 
 `collagen_od_um2_per_mm_length` is **not** a fibrosis index. It integrates a concentration
 through the wall, so a thicker wall gives more of everything — arithmetic, not biology.
@@ -279,7 +279,7 @@ Pearson r against media thickness, from the batch over all four sections:
 
 All four sections show the per-length figure tracking thickness at r ≥ 0.73; on arch sec2 it
 is weakest because that mosaic is incomplete and cut into five short segments. The ratio
-removes it in every case, and the **sign flips**, which is the tell — a units artefact would
+removes it in every case, and the **sign flips**, which is the tell — a units artifact would
 have stayed positive.
 
 What is left is a real negative relationship of varying strength: where the media is
@@ -300,7 +300,7 @@ the per-length figure says. `r_thickness_vs_collagen_to_muscle` and
 `r_thickness_vs_collagen_per_length` are in `totals` so the confound is visible without
 opening the figure.
 
-The bottom panel of the figure plots this normalised: `collagen_to_muscle` position by
+The bottom panel of the figure plots this normalized: `collagen_to_muscle` position by
 position along the wall, with the *running* value — collagen accumulated so far over muscle
 accumulated so far — over it on the same axis, settling on the whole-wall ratio. Both are
 the same quantity, so a drift of the running curve away from the dashed whole-wall line is
@@ -367,7 +367,7 @@ hole. Placing the missing fields in the app is the fix that works.
 ### Reading it back to the vessel
 
 `plot_rectangular(res, overview_rgb=...)` is one column on one horizontal scale: the section
-with the traced wall on top — a quarter-point white dash, dotted at whole millimetres, with
+with the traced wall on top — a quarter-point white dash, dotted at whole millimeters, with
 the start and end of the strip marked — then the unrolled wall, the two stain channels, the
 local collagen density, and the cumulative curve. A step in the cumulative curve lines up with
 the patch of wall that caused it, and the numbered marks say where on the vessel that is.
@@ -380,26 +380,26 @@ wall, and from there the lumen is on the opposite side. Deciding globally leaves
 past the junction inside out, with adventitia drawn where the lumen belongs — which is
 exactly what the arch figure showed. The per-position votes are median-filtered over a
 window much wider than a junction (and wrapped on a closed vessel, or the seam where the ring
-is cut open votes against its own neighbours).
+is cut open votes against its own neighbors).
 
 The wall is then **cut** into segments at branches, at no-data stretches, at gaps in the
 band, and wherever the path turns over. Arch sec2 comes out as five segments, of which two
 carry the vessel — 0.31 and 2.53 mm — with three slivers between the junction flags; the two
 thoracic sections are one segment each. The cuts are drawn as hard vertical lines on every
-panel that runs along the wall, because the two sides of a cut are not neighbours on the
+panel that runs along the wall, because the two sides of a cut are not neighbors on the
 vessel and nothing should be read across the join. `profile["segment"]` carries the labels
 and `totals["n_segments"]` the count.
 
 ### Branches
 
-A branch is detected as a *topological* fact, not a thickness: rasterise the strip of wall the
+A branch is detected as a *topological* fact, not a thickness: rasterize the strip of wall the
 straightening actually measured, subtract it from the media, and see whether a substantial
 piece of wall is left attached. At a fork the branch's own wall is media the strip never
 covered; a merely thick wall lies entirely inside it and leaves nothing. That distinction
 matters, because a genuinely thickened wall is the thing you would be looking for in a
 diseased vessel and must not be written off as a junction.
 
-(The textbook answer — skeletonise the media and look for degree-three nodes — does not work
+(The textbook answer — skeletonize the media and look for degree-three nodes — does not work
 here. A wall band is tens of microns thick, so its skeleton is a mesh of small loops: on a
 plain thoracic ring with no branch at all it reported 182 forks.)
 
@@ -410,7 +410,7 @@ A window would either fall short of that or overshoot it, and which of the two i
 fact about the specimen.
 
 Flagged stretches are shaded on the figure — orange for a junction, red for wall that is
-thick without forking, grey for a gap in the band, blue for a band with no muscle in it.
+thick without forking, gray for a gap in the band, blue for a band with no muscle in it.
 **By default all of these are left out of the totals** (`exclude_non_wall=True`), and the
 cumulative curves follow the same decision, so the curve ends at the reported total instead
 of climbing through a stretch the total omits. On arch sec2 this is not a small effect: the
@@ -426,7 +426,7 @@ a straight line — the apparent focal lesion was the branch.
 ### Redirecting the outline by hand
 
 No rule gets every section right, and the ones it gets wrong are usually not
-defects so much as judgements: which of two touching vessels to follow, whether
+defects so much as judgments: which of two touching vessels to follow, whether
 to go up a branch or past it, where a torn wall ought to be joined. Those are
 questions about the specimen, and the person looking at it can answer them in a
 second.
@@ -440,7 +440,7 @@ with this outline** runs the same analysis with the same settings, differing onl
 in where the curve started.
 
 The drawing does not have to be accurate. Everything downstream is unchanged, so
-the re-centring pass pulls a rough line onto the middle of the media exactly as
+the re-centering pass pulls a rough line onto the middle of the media exactly as
 it does the automatic one. Deliberately mangling a good outline — 90 points,
 ±15 µm of jitter, and one stretch dragged 40 µm off the wall, so that only 81 %
 of it still lay on the muscle — and re-measuring from it gives back a curve
@@ -450,13 +450,13 @@ of it still lay on the muscle — and re-measuring from it gives back a curve
 keeps the outline you have and clears the canvas for the next one; on an empty
 canvas the first stroke *is* the outline rather than an edit to one, so a
 vessel the detector missed entirely can be drawn from scratch. Kept outlines
-stay on screen in white, the live one in the accent colour. Re-measuring then
+stay on screen in white, the live one in the accent color. Re-measuring then
 returns one result per outline — its own `lumen_rank`, its own row in the
 vessel picker, its own `..._vessel2_*` files — so a hand-drawn vessel is a
 vessel everywhere downstream rather than a special case. Drawing back the two
 outlines the detector finds on arch sec4 reproduces its own numbers to 0.1 %
 (3.733 and 3.307 mm against 3.738 and 3.309). Neither outline has to be
-accurate: re-centring pulls each onto the middle of its own media exactly as
+accurate: re-centering pulls each onto the middle of its own media exactly as
 it does an automatic trace, and each carries its own ring/arc flag.
 
 In the library it is `analyze_wall(..., guide_um=...)`, an (x, y) array in microns
@@ -477,7 +477,7 @@ vessel and the cohort step pools them back together by segment, which is the rig
 anyway. Arch sec4 goes from 3.74 mm of measured wall to 3.74 + 3.31 = 7.05 mm, and the two
 limbs agree closely on the readout that matters — collagen ÷ muscle 0.399 and 0.434.
 
-The **Vessel wall** tab shows a button per vessel above the figure, labelled with its own
+The **Vessel wall** tab shows a button per vessel above the figure, labeled with its own
 wall length, so switching between them is explicit rather than something to notice by
 counting lumina against what the cropped map happens to show.
 
@@ -496,7 +496,7 @@ on the parent instead.
 
 ### Two views of the straightened wall
 
-**Real microns** keeps the true thickness, so wall thickening is visible. **Thickness-normalised**
+**Real microns** keeps the true thickness, so wall thickening is visible. **Thickness-normalized**
 divides each sampling line by its own wall thickness, so 0 is the luminal surface and 1 the
 media/adventitia junction *everywhere* and the media is a rectangle. Use the second to compare
 where in the wall something sits — one row means the same fraction of the media at every
@@ -519,7 +519,7 @@ parent's lumen rather than enclosing one of its own, so it cannot be measured as
 vessel; restrict the input to an island containing only that branch if it needs its own trace.
 
 **Why the area fraction has no threshold in it.** Collagen inside the media is unimodal, so an
-automatically chosen threshold has nothing to lock onto. Re-centring the sampling curve on one
+automatically chosen threshold has nothing to lock onto. Re-centering the sampling curve on one
 thoracic section moved the collagen percentiles by less than 0.02 — and moved Otsu from 0.778
 to 0.632, and with it the reported fibrosis from 9 % to 34 %. A per-section threshold is also
 wrong in principle: a more fibrotic section earns a higher threshold, which cancels part of the
@@ -543,7 +543,7 @@ together. The map spans both, so it's sized by their sum and needs no control
 of its own; its height still follows its own aspect ratio, unrelated to the
 rows below it. **Font size (pt)** sets the panel titles directly and scales
 labels and legend text with
-them, on the same reasoning `FS_TITLE` and its neighbours already follow —
+them, on the same reasoning `FS_TITLE` and its neighbors already follow —
 panels that disagree about what a title looks like read as separate figures
 pasted together — while tick labels stay one point smaller than whatever the
 titles end up at, rather than their own independent size to keep in step;
@@ -565,7 +565,7 @@ to move between lumina instead of reading their positions off the map.
 Every panel is lettered A through H, and the flagged stretches shaded into
 the four along-the-wall panels — a branch, a stretch with no image behind it,
 one thickened without forking — get one shared legend at the bottom of panel
-H rather than a colour code with no key: built from whichever flags actually
+H rather than a color code with no key: built from whichever flags actually
 appear in this trace, so it says what's shaded here rather than what could be
 in general.
 
@@ -606,7 +606,7 @@ to `/api/replot`, which looks up the `WallResult` behind whichever
 `..._rectangular_channels.png` is on screen — kept server-side from the run
 that produced it, keyed by that PNG's own path — and calls `plot_rectangular`
 again with the new rotation, size, font scale, grid and spines, overwriting
-the same PNG and SVG a plain analysis run would have saved. Every restyle
+the same PNG and PDF a plain analysis run would have saved. Every restyle
 starts over from that original cached result rather than the previously
 rotated output, so turning the dial back and forth never compounds — 30° then
 another 30° lands exactly where a single 60° would, not a degree short from
@@ -646,7 +646,7 @@ Every folder name is read for mouse, genotype, age, segment, slide and section:
 order
 ```
 
-Nothing insists on that order. Each field is recognised by what it looks like — `sec\d+`,
+Nothing insists on that order. Each field is recognized by what it looks like — `sec\d+`,
 `slide \w+`, a bare 3+ digit number for the animal, a comma-joined `genotype, age`, and a
 vocabulary of regions for whichever organ's tab you are in: aortic segments (root,
 ascending, arch, middle, descending thoracic, thoracic, abdominal, supra/infrarenal, plus
@@ -692,10 +692,20 @@ mean, and **a dot for every animal**. The dots are the point of it — with thre
 a side, a bar and an error bar cannot tell you whether a difference is four animals agreeing
 or one animal carrying the group. A dot can be a mouse (per segment, or pooled across
 segments) or a section; choose *section* and the figure says in red that sections within an
-animal are repeated measures, because a bar drawn over them is not an n. `p` is printed as a
+animal are repeated measures, because a bar drawn over them is not an n.
+
+**Bars are** picks what the groups are: genotype by default, `age` when the batch spans two,
+or one bar per `mouse`. A field every animal agrees on is not offered — splitting on it
+would draw the figure already on screen. Whatever it picks, the **Colors** boxes in the
+plot controls below name those groups, and a color is fixed to the *name*: a panel that is
+missing a group does not recolor the rest, and a scheme saved as "paper 1" puts the same KO
+in the same red in every one of these tools (they share `~/.labkit/colour_schemes`). The
+significance brackets follow the choice too — the Welch test is re-run on the field being
+compared rather than read out of `cohort_comparison.csv`, which was computed on genotype.
+`p` is printed as a
 number, not as stars: at these group sizes 0.04 and 0.06 are the same result. Error bars are
-SD, SEM or none; width and font size are set in millimetres and points. The figure is
-written as `cohort_plot.png` and `cohort_plot.svg`, and **Download SVG** hands you the
+SD, SEM or none; width and font size are set in millimeters and points. The figure is
+written as `cohort_plot.png` and `cohort_plot.pdf`, and **Download PDF** hands you the
 vector with its text still text. Plots are drawn from the `cohort_*.csv` already on disk, so
 turning a control costs nothing — the measurement is the expensive part and it is done.
 
@@ -706,9 +716,12 @@ tick label eats into the plot instead of the margin.
 
 **Through the wall** is drawn beside the readout grid, from `cohort_depth_relative.csv`,
 and has two layouts. By default a column is a stain and the genotypes are overlaid in it,
-for comparing groups. Tick **both stains in one panel** and it turns the other way up: one
-panel per condition with the counterstain and the collagen in it, coloured as the section
-figure colours them, for reading where the collagen sits relative to the muscle within one
+for comparing groups; **Bars are** moves that overlay onto whichever field is chosen, and
+the one it stops comparing becomes a row of panels instead. (Only `segment`, `age` and
+`genotype` are in that table — the mice were averaged away when it was written, so grouping
+this figure by mouse leaves it on genotype.) Tick **both stains in one panel** and it turns the other way up: one
+panel per condition with the counterstain and the collagen in it, colored as the section
+figure colors them, for reading where the collagen sits relative to the muscle within one
 wall. Only conditions with data get a panel, so the panels wrap rather than leaving the
 cross product's holes. **source data (CSV)** under the figure is the table it was drawn
 from: one row per depth per condition, mean, SD between animals, and n.
@@ -753,19 +766,20 @@ WA.save_results(res, "out", "section01", overview_rgb=overview)
 ```
 
 `save_results` writes the tables, the two straightened images, the maps as `.npz`, and the
-one figure as both `_rectangular_channels.png` and `_rectangular_channels.svg`. The SVG is
+one figure as both `_rectangular_channels.png` and `_rectangular_channels.pdf`. The PDF is
 its own render, not a second save of the PNG's figure: every label is real text rather than
-matplotlib's default of a glyph traced out as a curve, so a panel can be restyled for a paper
+matplotlib's default of a glyph traced out as a curve (`pdf.fonttype: 42` embeds the
+typeface instead), so a panel can be restyled for a paper
 without going back through the analysis, and the map's traced wall is one selectable path
-in both, since a single stroke colour needs no per-segment fragments. The numbered marks
+in both, since a single stroke color needs no per-segment fragments. The numbered marks
 along it say where on the wall each point is. In the app the same
-file is one click behind **Download SVG** above the figure. Pass `overview_rgb` to get the
+file is one click behind **Download PDF** above the figure. Pass `overview_rgb` to get the
 map panel — the section with the traced wall
 drawn on it, turned a quarter turn if it is taller than it is wide, so the page is used
 across rather than down.
 
-Nothing drawn on the section carries meaning in its colour. The trace is white, the
-millimetre marks and the start/end markers are white with a black edge, and start and end are
+Nothing drawn on the section carries meaning in its color. The trace is white, the
+millimeter marks and the start/end markers are white with a black edge, and start and end are
 told apart by shape — a circle and a square — rather than by hue. A trichrome section is
 already red and blue; a green dot or a red square on top of it reads as tissue, and the whole
 point of the map panel is to be looked *through* while fibrosis is scored by eye. **Red
@@ -779,7 +793,7 @@ it, in passes, so a settled member becomes an anchor for the rest without any me
 voting against a sibling that is still displaced.
 
 `SC.save_layout` / `SC.load_layout` round-trip a layout as JSON plus a CSV of tile
-positions, so a session finished by hand in the app can be re-analysed later without
+positions, so a session finished by hand in the app can be re-analyzed later without
 repeating the work.
 
 ## The generated notebook
@@ -807,5 +821,5 @@ default, so the same file also works for someone whose sections are somewhere el
 A run overwrites whatever is already at that path — and says so before it does — which is
 the other use for `--out`: building a second notebook without losing the first. `.gitignore`
 covers `*.ipynb` rather than the one default name, since every notebook here is a generated
-artefact carrying results and `--out` can call them anything; `git add -f` if you ever do
+artifact carrying results and `--out` can call them anything; `git add -f` if you ever do
 want to track one.

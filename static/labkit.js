@@ -8,7 +8,9 @@
  *   LK.theme.toggle()                 dark <-> light, remembered
  *   LK.browse({...})                  the file dialog, in all of them
  *   LK.pathPicker(host, {...})        a path box with a Browse button
+ *   LK.hexBox(colorInput)             the well's hex code, typed or pasted
  *   LK.PlotControls(host, {...})      the plotting panel, in all of them
+ *   LK.plateEditor(host, {...})       a plate map: which wells got what
  *   LK.api(url, opts)                 fetch that throws the server's message
  *   LK.nameMatch(query)              a filter box, as a predicate over a name
  */
@@ -287,6 +289,8 @@
             onclick: () => here.parent && go(here.parent) }),
           pathBox,
           el('button', { class: 'ghost small', text: 'Go', onclick: () => go(pathBox.value) }),
+          el('button', { class: 'ghost small', text: '+ Folder',
+            title: 'Create a subfolder of the folder shown', onclick: () => newFolder() }),
         ]),
         el('div', { class: 'lk-recents', style: { paddingTop: '8px' } }, [crumbs]),
         recentRow,
@@ -319,6 +323,51 @@
         if (!picked.length) return;
         remember(here.path);
         close(opts.mode === 'files' ? picked : picked[0]);
+      }
+
+      /* Create a subfolder of the folder on screen.
+         An input in the folder list, not prompt(): the names it must not
+         collide with are the ones already listed beside it, and a modal on
+         top of a modal hides them.  (It also keeps working in the embedded
+         browsers that answer prompt() with null without asking anyone.)
+         Anything that repaints the column -- a click, the filter -- drops the
+         row, which is the same gesture as giving up on it. */
+      function newFolder() {
+        const open = dirsCol.querySelector('.lk-newname');
+        if (open) return open.focus();
+        const nameBox = el('input', {
+          type: 'text', class: 'lk-newname', spellcheck: 'false',
+          placeholder: 'name of the new folder',
+          onkeydown: (e) => {
+            if (e.key === 'Enter') create(nameBox.value);
+            // Escape dismisses the row, not the whole dialog, so it must not
+            // reach the document listener that closes it.
+            if (e.key === 'Escape') { e.stopPropagation(); row.remove(); footer(); }
+          },
+        });
+        const row = el('div', { class: 'lk-entry' }, [
+          el('span', { class: 'lk-glyph', text: '▸' }), nameBox,
+        ]);
+        dirsCol.insertBefore(row, dirsCol.children[1] || null);
+        nameBox.focus();
+        footNote.style.color = '';
+        footNote.textContent = 'Enter to create it in ' + here.path;
+      }
+
+      async function create(name) {
+        let made;
+        try {
+          made = await LK.api(opts.endpoint + '/mkdir', { body: { path: here.path, name } });
+        } catch (err) {
+          made = { error: err.message };
+        }
+        if (made.error) {
+          footNote.textContent = made.error;
+          footNote.style.color = 'var(--bad)';
+          return;
+        }
+        remember(made.path);
+        go(made.path);        // land in it: the point was to put something here
       }
 
       async function go(path) {
@@ -518,6 +567,41 @@
     };
   };
 
+  /* The hex code of a color well, in a box beside it: on screen without
+     opening the picker, and typed or pasted where the browser's own picker
+     opens on RGB.  `#12A396`, `12a396` and `#1a9` are all read; anything else
+     puts the well's code back.  The well stays the one value -- the box
+     follows it however it is set, from the picker or from code. */
+  LK.hexBox = function (input) {
+    const box = el('input', { type: 'text', class: 'lk-hex', spellcheck: 'false',
+      maxlength: '7', title: 'hex color — type or paste one, e.g. #12A396' });
+    const show = () => { box.value = input.value.toUpperCase(); };
+    const own = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get() { return own.get.call(input); },
+      set(value) { own.set.call(input, value); show(); },
+    });
+    input.addEventListener('input', show);
+    input.addEventListener('change', show);
+    // Typing is not a choice yet, so it stays in the box: a form listening
+    // further up would redraw from a half-written code.
+    box.addEventListener('input', (e) => e.stopPropagation());
+    box.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(box.value.trim());
+      if (!m) { show(); return; }
+      const hex = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
+      if ('#' + hex.toLowerCase() === input.value) { show(); return; }
+      input.value = '#' + hex;
+      // What picking it in the well would have sent.
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    show();
+    return box;
+  };
+
   // ------------------------------------------------------- plot controls ---
 
   /* "min, max" as a pair, or null for anything else -- the same reading as
@@ -529,8 +613,8 @@
     return values.length >= 2 ? [values[0], values[1]] : null;
   };
 
-  /* labkit.plots.PALETTES, so an app's own canvas draws a group in the colour
-     the exported figure will give it. Grey first and red second is the point:
+  /* labkit.plots.PALETTES, so an app's own canvas draws a group in the color
+     the exported figure will give it. Gray first and red second is the point:
      control against mutant needs no legend. */
   LK.PALETTES = {
     'red-grey': ['#5f6772', '#c62f34', '#2c7fb8', '#c8935f',
@@ -541,11 +625,11 @@
                   '#009e73', '#cc79a7', '#56b4e9', '#111111'],
   };
 
-  /* theme.PRINT.ink. Not pure black: 100 % K beside a grey series reads as a
+  /* theme.PRINT.ink. Not pure black: 100 % K beside a gray series reads as a
      hole on paper. */
   LK.INK = '#1f2933';
 
-  /** The colour a palette gives the *index*-th group, cycling. */
+  /** The color a palette gives the *index*-th group, cycling. */
   LK.seriesColour = function (index, palette) {
     const wheel = LK.PALETTES[palette] || LK.PALETTES['red-grey'];
     return wheel[((index % wheel.length) + wheel.length) % wheel.length];
@@ -556,12 +640,138 @@
     PALETTE_SWATCHES[key] = LK.PALETTES[key].slice(0, 4);
   });
 
+  /* What the journals actually ask for, from each publisher's own figure
+     guidelines, read 2026-09-29. The `source` is kept beside the numbers so a
+     figure that has moved can be checked rather than guessed at.
+
+     The widths are printed column widths. Setting the *figure* to one of them
+     is what makes a panel arrive at the size it will be printed, which is the
+     only size at which "is this label readable" has an answer -- a panel drawn
+     at 120 mm and dropped into an 89 mm column loses a quarter of its type. */
+  LK.JOURNALS = {
+    nature: {
+      label: 'Springer Nature',
+      widths: { '1 column': 89, '1\u00bd columns': 128, '2 columns': 183 },
+      font_pt: 7, dpi: 300, max_height_mm: 247,
+      note: 'Text 5\u20137 pt, panel letters 8 pt bold, lines 0.25\u20131 pt, 300 dpi. '
+        + 'Page depth 247 mm. The 1\u00bd column is a 120\u2013136 mm range; 128 is its middle.',
+      source: 'nature.com/nature/for-authors/final-submission',
+    },
+    cell: {
+      label: 'Cell Press',
+      widths: { '1 column': 85, '1\u00bd columns': 114, '2 columns': 174 },
+      font_pt: 7, dpi: 300, max_height_mm: 200,
+      note: 'Arial only, text 6\u20138 pt, lines 0.5\u20131.5 pt. 300 dpi color, '
+        + '1000 dpi line art. Whole figure within 165 \u00d7 200 mm.',
+      source: 'cell.com/information-for-authors/figure-guidelines',
+    },
+    science: {
+      label: 'Science (AAAS)',
+      widths: { '1 column': 57, '2 columns': 121, '3 columns': 184 },
+      font_pt: 7, dpi: 300,
+      note: 'Three-column page. Helvetica, axis labels 6\u20139 pt, nothing under 5 pt, '
+        + 'panel letters 10 pt bold. Their own page is behind a bot check, so these '
+        + 'come from the AAAS figure preparation guide \u2014 worth confirming.',
+      source: 'science.org author figure prep guide',
+    },
+    embo: {
+      label: 'EMBO Press',
+      widths: { '1 column': 87, '2 columns': 180 },
+      font_pt: 8, dpi: 300,
+      note: 'Helvetica, panel letters bold; lettering kept on its own layer so '
+        + 'production can restyle it \u2014 which needs live text, not outlines. '
+        + 'EMBO publishes the 87\u2013180 mm range but no text size; 8 pt is a safe one.',
+      source: 'link.springer.com/journal/44318/submission-guidelines',
+    },
+    pnas: {
+      label: 'PNAS',
+      widths: { '1 column': 87, '1\u00bd columns': 114, '2 columns': 178 },
+      font_pt: 7, dpi: 300,
+      note: 'Arial or Helvetica, text 6\u20138 pt and never under 6 pt after reduction.',
+      source: 'pnas.org digital art guidelines',
+    },
+    jgp: {
+      label: 'JGP / Rockefeller',
+      widths: { '1 column': 85 },
+      font_pt: 8, dpi: 300,
+      note: 'Arial, 8 pt text (5 pt sub- and superscript), lines 0.5\u20131 pt, '
+        + '300 dpi (600 where a photo and labels share a panel). Only the single '
+        + 'column is published: they reduce figures to 85 mm wherever they can.',
+      source: 'rupress.org/jgp/pages/fig-vid-guidelines',
+    },
+  };
+
+  /* What a preset sets on top of the journal's own numbers.
+
+     Journals publish a column width, a type size and a line-weight range.
+     Nobody publishes how tall a panel should be, so it falls to the default
+     -- 0.72 of the width -- which makes a two-column figure 135 mm tall: one
+     panel over half of Nature's 247 mm page. These two are the house answer,
+     and both stay editable like everything else a preset writes.
+
+     The pinned number is the *data area*, not the canvas, so a panel is the
+     size asked for whatever the labels turn out to be, and the canvas grows
+     round it by the 10 mm the ticks and the axis label need. Two panels set by
+     the same preset then match on the page, which is the whole point of
+     pinning it. It goes on the axis the *values* are on -- the height of an
+     upright panel, the width of a turned one -- because that is the axis a bar
+     is read along and the one bar_mm is not already sizing.
+
+     The width is not set at all. It is calculated, from one bar: 3.94 mm each,
+     so a bar is the same size on the page whether a panel holds two of them
+     or seven -- which is what a reader compares across a figure, and what
+     goes wrong the moment a panel is stretched to fill its column instead.
+
+     3.94 mm makes a category 6.35 mm wide -- 0.25 in, the pitch the lab's
+     own ephys notebook draws at (figsize=(0.25*18, 1.2)), so a panel from
+     here and a panel from that notebook sit side by side at one scale. It
+     also clears the (n = 5) printed under a group name, which at 7 pt is
+     5.33 mm. Names past about four characters -- R201C, rescue -- still want
+     the x rotation or the horizontal box; no width fits them and stays this
+     tight.
+     The column width becomes a ceiling: past about twenty groups the bars give
+     way rather than the figure running off the page.
+
+     32 mm is the compact end of what still reads: a single column comes out
+     43 mm tall, five rows to a page, and a p bracket still clears the tallest
+     point. Drawn down the ladder it is 28 mm where the bracket starts sitting
+     on the data, so this is one step back from the edge rather than a guess.
+     A two-column figure keeps the same 32 mm and so comes out a long strip --
+     which is right, because a figure that wide is meant to be a row of panels
+     and not one panel stretched across the page.
+
+     0.75 pt is inside every line-weight range these journals publish (Nature
+     0.25-1, Cell 0.5-1.5, JGP 0.5-1) and under matplotlib's 0.8 default, so
+     the frame stops being heavier than the trace inside it. */
+  const JOURNAL_PANEL = { bar_mm: 3.5, axes_mm: 32, line_width: 0.75 };
+
   /** Mirrors labkit.plots.PlotSpec -- keep the two in step. */
+  /* `names` in the sequence `order` asks for, keeping the strangers.
+   *
+   * The twin of labkit.plots.order_series, and the same reasoning: the order a
+   * reader needs is almost never alphabetical -- WT, P716L, Y715C is the order
+   * along the protein, and sorting puts the wild type last. A name the order
+   * does not mention keeps its place after the ones it does, so a saved order
+   * outlives the dataset it was typed for and a new condition appears at the
+   * end instead of vanishing. */
+  LK.orderSeries = function (names, order) {
+    const have = (names || []).map(String);
+    if (!order || !order.length) return have;
+    const seen = new Set();
+    const first = [];
+    order.map(String).forEach((name) => {
+      if (have.includes(name) && !seen.has(name)) { seen.add(name); first.push(name); }
+    });
+    return first.concat(have.filter((n) => !seen.has(n)));
+  };
+
   LK.defaultSpec = function () {
     return {
       kind: 'bar', centre: 'mean', error: 'sem', points: 'jitter',
-      palette: 'red-grey', colours: {},
-      width_mm: 85, height_mm: 0, axes_width_mm: 0, axes_height_mm: 0, font_pt: 8,
+      palette: 'red-grey', colours: {}, order: [],
+      width_mm: 85, height_mm: 0, axes_width_mm: 0, axes_height_mm: 0, bar_mm: 3.5,
+      horizontal: false,
+      font_pt: 8, font: 'arial',
       log_y: false, show_n: true, legend: true,
       title: '', ylabel: '', xlabel: '',
       show_p: true, p_style: 'auto', p_test: 'mann-whitney',
@@ -573,7 +783,7 @@
       log_x: false, ref_lines: '', legend_loc: 'best', dpi: 300,
       error_style: 'band', markers: 'o', marker_size: 2.6, line_width: 1.0,
       line_styles: '-', join: true, point_size: 3.2,
-      panel_width_mm: 25.4, panel_height_mm: 50.8, panel_cols: 0,
+      panel_width_mm: 25.4, panel_height_mm: 38.1, panel_cols: 0,   // 1 x 1.5 in
       scale_x_s: 0, scale_y: 0, family_spread: false, family_colour: 'voltage',
     };
   };
@@ -645,12 +855,25 @@
       ['palette', selectRow('Colors', 'lk-palette',
         [['red-grey', 'Red / gray'], ['greys', 'Grays'], ['reds', 'Reds'],
          ['colourblind', 'Color-blind safe']], 'Gray first, red second')],
+      ['font', selectRow('Font', 'lk-font',
+        [['arial', 'Arial'], ['pt-sans', 'PT Sans'], ['pt-mono', 'PT Mono']],
+        'Arial is what the journals ask for. PT Sans is the one the app itself '
+        + 'is set in, for a figure going next to it in a talk; PT Mono is for '
+        + 'labels that are sequences, well numbers or filenames.')],
     ];
     rows.forEach(([key, built]) => { fields[key] = built.field; root.appendChild(built.row); });
 
     const swatches = el('div', { class: 'swatches' });
+    /* The way back out of a typed order, which is not the same as alphabetical:
+       it hands the sequence back to whatever the data arrived in. */
+    const orderReset = el('button', { type: 'button', class: 'small ghost', hidden: true,
+      text: 'Default order',
+      title: 'Forget the order typed here and draw the conditions in the order '
+        + 'the data arrived in' });
     root.appendChild(el('label', { class: 'row' },
       [el('span', { text: '' }), swatches]));
+    root.appendChild(el('label', { class: 'row' },
+      [el('span', { text: '' }), orderReset]));
 
     // Saved schemes. Hidden unless the app serves the store, so an app
     // without labkit.schemes wired up shows no button that cannot work.
@@ -659,18 +882,79 @@
     const dropScheme = el('button', { type: 'button', class: 'small ghost', text: '\u00d7',
       title: 'Delete the saved scheme' });
     const schemeRow = el('div', { class: 'row', hidden: true,
-      title: 'A saved set of colours, by series name — shared with the other apps, '
+      title: 'A saved set of colors, by series name — shared with the other apps, '
         + 'so one decision about what the KO looks like covers the whole paper' },
       [el('span', { text: 'Scheme' }),
        el('div', { class: 'pair' }, [schemeField, saveScheme, dropScheme])]);
     root.appendChild(schemeRow);
 
-    // Size. Stored in millimetres whatever the boxes are typed in, so a
+    /* Journal presets. A menu, not a setting: picking one writes the width,
+       the type size, the font and the dpi into the boxes below, where they can
+       then be edited, along with a panel height and a line weight of our own
+       (see JOURNAL_PANEL). Nothing remembers which journal it was, because the
+       moment one of those boxes is touched the label would be a lie about the
+       figure. What the journal asks for beyond those four numbers -- minimum
+       type, line weights, page depth -- is printed underneath, since it is the
+       part no control can enforce. */
+    const journalField = el('select', { style: { flex: '1 1 auto', width: 'auto' } });
+    const columnsField = el('select', { style: { flex: '0 1 auto', width: 'auto' } });
+    const journalNote = el('div', { class: 'hint', hidden: true });
+    journalField.appendChild(el('option', { value: '', text: '\u2014' }));
+    Object.keys(LK.JOURNALS).forEach((key) => journalField.appendChild(
+      el('option', { value: key, text: LK.JOURNALS[key].label })));
+    root.appendChild(el('label', { class: 'row',
+      title: 'Sets the figure to a printed column width, with the type size, font and '
+        + 'resolution that journal asks for. Everything stays editable afterwards. '
+        + 'The point size sets a whole 7/8/9 ladder, so tick labels come out a little '
+        + 'under the number and a panel title a little over it \u2014 which is one more '
+        + 'reason a title belongs in the caption. It also pins a compact plotting area '
+        + 'and a thinner line, so the figure is the shape a journal prints rather than '
+        + 'half a page tall; both are in the boxes below and both can be changed.' },
+      [el('span', { text: 'Journal' }),
+       el('div', { class: 'pair' }, [journalField, columnsField])]));
+    root.appendChild(journalNote);
+
+    function applyJournal(resetWidth) {
+      const journal = LK.JOURNALS[journalField.value];
+      journalNote.hidden = !journal;
+      if (!journal) { columnsField.innerHTML = ''; return; }
+      const names = Object.keys(journal.widths);
+      if (resetWidth || !names.includes(columnsField.value)) {
+        columnsField.innerHTML = '';
+        names.forEach((name) => columnsField.appendChild(
+          el('option', { value: name, text: name })));
+      }
+      state.width_mm = journal.widths[columnsField.value] || journal.widths[names[0]];
+      state.height_mm = 0;                 // the pinned axes size sets it
+      state.bar_mm = JOURNAL_PANEL.bar_mm;
+      // The pin goes on the value axis and bar_mm sizes the other one, so a
+      // turned panel gets the same two numbers the other way round rather than
+      // a 32 mm pin on the axis the groups sit on, which would squash every
+      // bar to fit it.
+      state.axes_width_mm = state.horizontal ? JOURNAL_PANEL.axes_mm : 0;
+      state.axes_height_mm = state.horizontal ? 0 : JOURNAL_PANEL.axes_mm;
+      state.line_width = JOURNAL_PANEL.line_width;
+      state.font_pt = journal.font_pt;
+      state.font = 'arial';
+      state.dpi = journal.dpi;
+      journalNote.textContent = journal.note + ' \u2014 ' + journal.source;
+      show(fields.font, state.font);
+      show(fields.line_width, state.line_width);
+      fontField.value = state.font_pt;
+      writeSize();
+      refresh();
+    }
+    journalField.addEventListener('change', () => applyJournal(true));
+    columnsField.addEventListener('change', () => applyJournal(false));
+
+    // Size. Stored in millimeters whatever the boxes are typed in, so a
     // figure specified in inches and one in mm are the same figure.
     const size = el('div', { class: 'pair' });
     const widthField = el('input', { type: 'number', min: '0.5', step: '0.1' });
     const heightField = el('input', { type: 'number', min: '0', step: '0.1',
-      title: 'Height. 0 lets it follow the width.' });
+      title: 'Height. 0 lets it follow the width \u2014 or, on a horizontal panel, '
+        + 'lets the figure grow down the page as groups are added, which is the '
+        + 'reason to turn it. Type one to cap that.' });
     const unitField = el('select', {});
     [['mm', 'mm'], ['in', 'in']].forEach(([value, text]) =>
       unitField.appendChild(el('option', { value, text })));
@@ -691,16 +975,46 @@
     const axesSize = el('div', { class: 'pair' });
     const axesWField = el('input', { type: 'number', min: '0', step: '0.1' });
     const axesHField = el('input', { type: 'number', min: '0', step: '0.1' });
+    const barField = el('input', { type: 'number', min: '0', step: '0.5',
+      title: 'The printed thickness of one bar, box or violin. The panel is sized '
+        + 'from it and the number of groups, so a bar stays the same size on the page '
+        + 'as groups come and go, and the figure size becomes a ceiling rather than '
+        + 'the size. Across the panel upright, down it when horizontal. 3.5 mm is the '
+        + 'tightest that still clears an (n = 5) under the group name; names longer '
+        + 'than about four characters want 5 mm, a rotation, or the horizontal box. '
+        + 'Ignored if that axes box is typed in. 0 hands the size back to the figure.' });
     axesSize.appendChild(el('label', {}, [el('span', { class: 'dim', text: 'w' }), axesWField]));
     axesSize.appendChild(el('label', {}, [el('span', { class: 'dim', text: 'h' }), axesHField]));
-    root.appendChild(el('label', { class: 'row', title: 'One panel\u2019s plotting area, in the unit chosen above. The title, the axis labels and the ticks are added outside it, so two figures set to the same number have the same-sized data area whatever their titles say. 0 leaves the size to the figure width.' },
+    axesSize.appendChild(el('label', {}, [el('span', { class: 'dim', text: 'bar' }), barField]));
+    root.appendChild(el('label', { class: 'row', title: 'One panel\u2019s plotting area, in the unit chosen above. The title, the axis labels and the ticks are added outside it, so two figures set to the same number have the same-sized data area whatever their titles say. 0 leaves the size to the figure \u2014 or, on the axis the groups sit on, to the bar box, which sizes the panel from the number of groups. Turning the panel swaps w and h with it.' },
       [el('span', { text: 'Axes' }), axesSize]));
 
-    [['show_n', 'n on the axis', 'Put (n = …) under each group label'],
-     ['log_y', 'Log y axis', ''],
+    [['horizontal', 'Horizontal',
+      'Turn the panel a quarter turn: groups down the left, bars reaching '
+      + 'right, first group at the top. The sizing turns with it \u2014 the bar '
+      + 'box still sets one bar\u2019s thickness and the axes box now pins the '
+      + 'width. Worth it for long group names, which get a whole column to '
+      + 'themselves instead of 6.35 mm of tick.'],
+     ['show_n', 'n on the axis', 'Put (n = …) beside each group label'],
+     ['log_y', 'Log value axis', 'The values, wherever they are: x on a turned panel.'],
      ['legend', 'Legend', '']].forEach(([key, label, title]) => {
       const built = checkRow(label, 'lk-' + key, state[key], title);
       fields[key] = built.field; root.appendChild(built.row);
+    });
+
+    /* Turning a panel turns its geometry with it: whichever axes box pinned
+       the value axis moves to the axis the values are now on, and bar_mm sizes
+       the one the groups are on. Without this the 32 mm pin would land on the
+       group axis and every bar would be squashed to fit it.
+
+       On the checkbox rather than on `root`, so it runs before the delegated
+       change handler reads the boxes back -- the other way round, the figure
+       would be redrawn once from the un-turned numbers and then sit there. */
+    fields.horizontal.addEventListener('change', () => {
+      const width = state.axes_width_mm;
+      state.axes_width_mm = state.axes_height_mm;
+      state.axes_height_mm = width;
+      writeSize();
     });
 
     function section(title, rows) {
@@ -774,9 +1088,9 @@
     const panelWField = el('input', { type: 'number', min: '0.2', step: '0.1' });
     const panelHField = el('input', { type: 'number', min: '0.2', step: '0.1' });
     const familyBox = section('Step families', [
-      ['family_colour', selectRow('Colour by', 'lk-familycolour',
+      ['family_colour', selectRow('Color by', 'lk-familycolour',
         [['voltage', 'Step voltage'], ['black', 'Black only']],
-        'A ramp across the steps, black, or one colour per group — '
+        'A ramp across the steps, black, or one color per group — '
         + 'the grouping fields appear here once something is plotted')],
       ['panel_cols', numberRow('Panels per row', 'lk-panelcols', { min: '0', max: '8', step: '1' },
         '0 picks a near-square grid')],
@@ -792,7 +1106,7 @@
         [el('span', { text: 'Panel size' }), el('div', { class: 'pair' }, [
           el('label', {}, [el('span', { class: 'dim', text: 'w' }), panelWField]),
           el('label', {}, [el('span', { class: 'dim', text: 'h' }), panelHField])])]),
-      familyBox.children[1]);   // straight after <summary>, above "Colour by"
+      familyBox.children[1]);   // straight after <summary>, above "Color by"
 
     if (opts.extra) root.appendChild(opts.extra);
 
@@ -851,20 +1165,26 @@
        onchange -> ... Each turn of that fired another request, and the browser
        gave up with ERR_INSUFFICIENT_RESOURCES. `spec()` reads; only a real
        edit notifies. */
-    // Size is kept in millimetres and shown in whichever unit is chosen, so
+    // Size is kept in millimeters and shown in whichever unit is chosen, so
     // switching the unit re-labels the same figure rather than resizing it.
     const MM_PER_IN = 25.4;
     let shownUnit = state.size_unit || 'mm';
 
     function writeSize() {
       const factor = (state.size_unit === 'in') ? MM_PER_IN : 1;
-      const round = (v) => Math.round(v * 100) / 100;
+      // Three decimals in inches, two in mm: both are a thousandth of the
+      // figure, and at two an inch is only quarter-millimeter resolution --
+      // enough that switching the unit and switching back used to move a
+      // 6 mm bar to 6.1 and a 114 mm column to 114.05.
+      const places = (factor === 1) ? 100 : 1000;
+      const round = (v) => Math.round(v * places) / places;
       widthField.value = round((state.width_mm || 0) / factor);
       heightField.value = state.height_mm ? round(state.height_mm / factor) : 0;
       panelWField.value = round((state.panel_width_mm || 25.4) / factor);
-      panelHField.value = round((state.panel_height_mm || 50.8) / factor);
+      panelHField.value = round((state.panel_height_mm || 38.1) / factor);
       axesWField.value = state.axes_width_mm ? round(state.axes_width_mm / factor) : 0;
       axesHField.value = state.axes_height_mm ? round(state.axes_height_mm / factor) : 0;
+      barField.value = state.bar_mm ? round(state.bar_mm / factor) : 0;
       shownUnit = state.size_unit;
     }
 
@@ -889,14 +1209,22 @@
       const axesH = parseFloat(axesHField.value);
       state.axes_width_mm = Number.isFinite(axesW) && axesW > 0 ? axesW * factor : 0;
       state.axes_height_mm = Number.isFinite(axesH) && axesH > 0 ? axesH * factor : 0;
+      const bar = parseFloat(barField.value);
+      state.bar_mm = Number.isFinite(bar) && bar > 0 ? bar * factor : 0;
     }
 
-    /* The colour boxes: one per series, once the host has said what the
+    /* The color boxes: one per series, once the host has said what the
        series are, and the palette's first four swatches until then -- a row of
-       pickers labelled with nothing is worse than no row at all.  Rebuilt only
+       pickers labeled with nothing is worse than no row at all.  Rebuilt only
        when the palette or the list of names changes, because rebuilding it
        under an open picker closes the picker. */
     let colourKeys = [];
+    /* The names as the data handed them over, kept so that "Default order"
+       has something to go back to: `colourKeys` is the *drawn* sequence and a
+       move rewrites it, so clearing `order` without this would leave the panel
+       showing a sequence the figure no longer draws -- the two disagreeing is
+       the exact failure the one-sequence rule exists to prevent. */
+    let arrivedKeys = [];
     let colourSig = null;
     const colourInputs = {};
 
@@ -918,17 +1246,41 @@
           swatches.appendChild(el('span', { class: 'swatch', style: { background: colour } })));
         return;
       }
-      colourKeys.forEach((key) => {
+      colourKeys.forEach((key, at) => {
         /* Keyed by name: an override has to mean "the KO is this red", not
            "the second group is", or a figure that gains a genotype in the
-           middle of the list silently recolours the ones either side. */
+           middle of the list silently recolors the ones either side. */
         const input = el('input', { type: 'color', title: key, oninput: () => {
           state.colours = Object.assign({}, state.colours, { [key]: input.value });
         } });
         colourInputs[key] = input;
+        /* This list is already the conditions in the order they are drawn, so
+           it is where they are reordered: one move writes `order`, and the
+           figure, the colors and the brackets all follow it because they are
+           all read off the one sequence. */
+        const move = (step) => () => {
+          const i = colourKeys.indexOf(key);
+          const j = i + step;
+          if (i < 0 || j < 0 || j >= colourKeys.length) return;
+          const next = colourKeys.slice();
+          next.splice(j, 0, next.splice(i, 1)[0]);
+          colourKeys = next;
+          state.order = next.slice();
+          colourSig = null;            // the signature IS the key list: force the rebuild
+          refresh();
+        };
+        const arrow = (text, step, dead) => el('button', {
+          type: 'button', class: 'nudge', text, disabled: dead,
+          title: dead ? '' : (step < 0 ? 'Draw ' + key + ' earlier'
+                                       : 'Draw ' + key + ' later'),
+          onclick: move(step),
+        });
         swatches.appendChild(el('label', { class: 'swatch-pick' },
-          [input, el('span', { text: key })]));
+          [arrow('\u25c2', -1, at === 0), input, LK.hexBox(input),
+           el('span', { text: key }),
+           arrow('\u25b8', 1, at === colourKeys.length - 1)]));
       });
+      orderReset.hidden = !(state.order && state.order.length);
       writeColours();
     }
 
@@ -939,7 +1291,7 @@
         if (field.type === 'checkbox') state[key] = field.checked;
         // A select with no matching option is showing nothing, not a choice:
         // a spec restored from a saved session can name a group to compare
-        // against, or a field to colour by, before the options for it exist.
+        // against, or a field to color by, before the options for it exist.
         // Reading the widget back here would replace it with whatever happened
         // to be on screen -- silently, and the figure would then be drawn to a
         // setting nobody chose.
@@ -957,6 +1309,13 @@
       buildSwatches();
       preview.textContent = describe(state);
     }
+
+    orderReset.addEventListener('click', () => {
+      state.order = [];
+      colourKeys = arrivedKeys.slice();   // back to the order the data arrived in
+      colourSig = null;
+      refresh();
+    });
 
     let notifying = false;
     function refresh() {
@@ -989,7 +1348,7 @@
     schemeField.addEventListener('change', (event) => {
       event.stopPropagation();     // this is not a spec field; it sets one
       // "From the palette" is the way back: no overrides at all, every series
-      // takes its palette colour again.
+      // takes its palette color again.
       state.colours = Object.assign({}, saved[schemeField.value] || {});
       colourSig = null;            // the pickers are showing the old scheme
       buildSwatches();
@@ -998,7 +1357,7 @@
     });
 
     saveScheme.addEventListener('click', async () => {
-      const name = (window.prompt('Save these colours as',
+      const name = (window.prompt('Save these colors as',
         schemeField.value || 'scheme') || '').trim();
       if (!name) return;
       readFields();
@@ -1087,9 +1446,13 @@
         readFields();
         writeColours();
       },
-      /** One colour box per series, named. Call it once the labels are known. */
+      /** One color box per series, named, in the order they will be drawn.
+          Call it once the labels are known: it is also the reorder control, so
+          an app that never calls it gets palette swatches and no way to say
+          what sequence the conditions go in. */
       setColourKeys(labels) {
-        colourKeys = (labels || []).map(String);
+        arrivedKeys = (labels || []).map(String);
+        colourKeys = LK.orderSeries(arrivedKeys, state.order);
         buildSwatches();
       },
       /** Offer "everything against <control>" once the group labels are known. */
@@ -1112,7 +1475,7 @@
         if (pairsField.selectedIndex < 0) pairsField.value = 'all';
         readFields();
       },
-      /** Offer the grouping fields as trace colours, once the panels are known. */
+      /** Offer the grouping fields as trace colors, once the panels are known. */
       setColourBy(names) {
         const colourField = fields.family_colour;
         const current = state.family_colour || colourField.value;
@@ -1126,6 +1489,226 @@
         readFields();
       },
     };
+  };
+
+  // ----------------------------------------------------------- plate map ---
+
+  /* labkit.plate.FORMATS: rows and columns of each SBS plate, smallest first. */
+  LK.PLATE_FORMATS = {
+    '6-well': [2, 3], '12-well': [3, 4], '24-well': [4, 6],
+    '48-well': [6, 8], '96-well': [8, 12], '384-well': [16, 24],
+  };
+
+  /* labkit.plate.canon_well for the spellings a layout file can hold: "b1",
+     "B-01" -> "B01". The server reads the rest (a plate reader's r02c01). */
+  function canonWell(text) {
+    const m = /^([A-Pa-p])[\s_-]?0*(\d{1,2})$/.exec(String(text).trim());
+    return m ? m[1].toUpperCase() + m[2].padStart(2, '0') : null;
+  }
+
+  /**
+   * A plate map: which wells got what.
+   *
+   *   layout    { format, labels: { column: { B01: 'WT' } } } -- the shape
+   *             labkit.plate reads and writes, edited in place
+   *   wells     the ids that have data; every other well is drawn faint
+   *   emptyNote what a well with no data is called on hover ('no images')
+   *   columns   names to offer for a column of labels
+   *   onchange  called after every edit
+   *
+   * Select wells (click, drag, or a row or column heading), type what is in
+   * them, Enter.  One column of labels at a time: a two-factor plate is two
+   * passes over the same grid, not one cell holding two things.
+   */
+  LK.plateEditor = function (host, options) {
+    const opts = Object.assign({ layout: null, wells: [], onchange: null,
+      columns: ['variant', 'treatment', 'condition', 'concentration', 'cell_line'],
+      // What a well with no data is called on hover. Most callers here mean
+      // images; an app planning a plate it has not run yet means something
+      // else, and a hard-coded 'no images' was simply wrong on its screen.
+      emptyNote: 'no images' },
+    options || {});
+    const layout = opts.layout || {};
+    layout.labels = layout.labels || {};
+    const present = new Set(opts.wells);
+    const picked = new Set();
+    let column = Object.keys(layout.labels)[0] || opts.columns[0];
+    let adding = true;          // what the drag in progress does to a well
+    let dragging = false;       // a press on a well, not yet let go
+
+    // The smallest plate that holds every well in use. Nothing in a filename
+    // says which of the six it was, but r08c02 rules out the four smaller ones.
+    function fit() {
+      const used = opts.wells.concat(...Object.values(layout.labels).map(Object.keys));
+      const holds = (f) => used.every((id) => id.charCodeAt(0) - 65 < LK.PLATE_FORMATS[f][0]
+        && Number(id.slice(1)) <= LK.PLATE_FORMATS[f][1]);
+      if (!LK.PLATE_FORMATS[layout.format] || !holds(layout.format)) {
+        layout.format = Object.keys(LK.PLATE_FORMATS).find(holds) || '384-well';
+      }
+    }
+    const changed = () => opts.onchange && opts.onchange(layout);
+
+    const formatSelect = el('select', {
+      title: 'Plate format',
+      onchange: (e) => { layout.format = e.target.value; picked.clear(); paint(); changed(); },
+    });
+    const columnSelect = el('select', {
+      title: 'The column these labels make. One at a time: pick another to label '
+        + 'the same wells by something else, such as a treatment.',
+      onchange: (e) => {
+        if (e.target.value === '') {
+          column = (prompt('Name of the new column') || '').trim() || column;
+        } else column = e.target.value;
+        paint();
+      },
+    });
+    const labelBox = el('input', {
+      type: 'text', placeholder: 'what is in the selected wells',
+      onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); assign(); } },
+    });
+    // Select, type, Enter: the label box takes the keyboard as soon as the
+    // mouse lets go of the grid.
+    const grid = el('div', { class: 'lk-plate',
+      onmouseup: () => { dragging = false; labelBox.focus(); } });
+    const legend = el('div', { class: 'lk-plate-bar' });
+    const fileBox = el('input', {
+      type: 'file', accept: '.json,application/json', style: { display: 'none' },
+      onchange: async (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        let read;
+        try { read = JSON.parse(await file.text()); } catch (err) {
+          alert('That is not a layout file: ' + err.message); return;
+        }
+        // A layout saved here, or one saved by Scrambler (one `assignments` map).
+        const labels = read.labels || (read.assignments ? { condition: read.assignments } : {});
+        layout.format = read.format || read.plate_format;
+        layout.labels = {};
+        Object.keys(labels).forEach((name) => Object.keys(labels[name] || {}).forEach((well) => {
+          const id = canonWell(well), value = String(labels[name][well] || '').trim();
+          if (id && value) (layout.labels[name] = layout.labels[name] || {})[id] = value;
+        }));
+        column = Object.keys(layout.labels)[0] || column;
+        picked.clear();
+        paint();
+        changed();
+      },
+    });
+
+    function assign() {
+      const value = labelBox.value.trim();
+      const into = layout.labels[column] = layout.labels[column] || {};
+      picked.forEach((id) => { if (value) into[id] = value; else delete into[id]; });
+      if (!Object.keys(into).length) delete layout.labels[column];
+      picked.clear();
+      labelBox.value = '';
+      paint();
+      changed();
+    }
+
+    function paint() {
+      fit();
+      const rows = LK.PLATE_FORMATS[layout.format][0], cols = LK.PLATE_FORMATS[layout.format][1];
+      const labels = layout.labels[column] || {};
+      // In the order they were first given, not sorted: a label keeps its color
+      // while the next ones are added.
+      const values = Array.from(new Set(Object.values(labels)));
+      const tint = (value) => LK.seriesColour(values.indexOf(value));
+
+      formatSelect.innerHTML = '';
+      Object.keys(LK.PLATE_FORMATS).forEach((f) => formatSelect.appendChild(
+        el('option', { value: f, text: f, selected: f === layout.format })));
+      columnSelect.innerHTML = '';
+      Array.from(new Set(Object.keys(layout.labels).concat(column, opts.columns)))
+        .forEach((name) => {
+          const n = Object.keys(layout.labels[name] || {}).length;
+          columnSelect.appendChild(el('option', {
+            value: name, selected: name === column,
+            text: name + (n ? ' · ' + n + (n === 1 ? ' well' : ' wells') : ''),
+          }));
+        });
+      columnSelect.appendChild(el('option', { value: '', text: 'other…' }));
+
+      const ids = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) ids.push(String.fromCharCode(65 + r) + String(c + 1).padStart(2, '0'));
+      }
+      // A heading selects its whole line, or clears it if it already is.
+      const toggle = (line) => {
+        const on = !line.every((id) => picked.has(id));
+        line.forEach((id) => (on ? picked.add(id) : picked.delete(id)));
+        paint();
+      };
+      const heading = (text, line, title) => el('div', {
+        class: 'lk-plate-head', text, title, onclick: () => toggle(line) });
+
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = '1.7em repeat(' + cols + ', minmax(0, 1fr))';
+      grid.classList.toggle('dense', cols > 12);
+      grid.appendChild(heading('', ids, 'Every well'));
+      for (let c = 0; c < cols; c++) {
+        grid.appendChild(heading(String(c + 1), ids.filter((id, i) => i % cols === c), 'Column ' + (c + 1)));
+      }
+      ids.forEach((id, i) => {
+        if (i % cols === 0) grid.appendChild(heading(id[0], ids.slice(i, i + cols), 'Row ' + id[0]));
+        const said = Object.keys(layout.labels).filter((name) => layout.labels[name][id])
+          .map((name) => name + ': ' + layout.labels[name][id]);
+        const mark = (node) => {
+          if (adding) picked.add(id); else picked.delete(id);
+          node.classList.toggle('sel', adding);
+        };
+        grid.appendChild(el('div', {
+          class: 'lk-well' + (present.has(id) ? ' has' : '') + (picked.has(id) ? ' sel' : ''),
+          text: labels[id] || '',
+          title: [id].concat(said, present.has(id) ? [] : [opts.emptyNote]).join(' · '),
+          style: labels[id] ? { background: tint(labels[id]) + '66' } : null,
+          // preventDefault: a drag across the grid is a selection of wells,
+          // not of the text in them.
+          onmousedown: (e) => {
+            e.preventDefault(); dragging = true; adding = !picked.has(id); mark(e.currentTarget);
+          },
+          // Only a drag that began on a well. A press on a well the pointer was
+          // not yet known to be over (a redrawn grid, a tap) arrives as an enter
+          // with the button already down, then the press: marking on that enter
+          // made the press undo it, so every other selection came out empty.
+          onmouseenter: (e) => {
+            if (!(e.buttons & 1)) dragging = false; else if (dragging) mark(e.currentTarget);
+          },
+        }));
+      });
+
+      legend.innerHTML = '';
+      values.forEach((value) => legend.appendChild(el('button', {
+        class: 'ghost small', title: 'Use this label for the selected wells',
+        onclick: () => { labelBox.value = value; labelBox.focus(); },
+      }, [el('span', { class: 'lk-plate-swatch', style: { background: tint(value) } }),
+          value + ' · ' + Object.values(labels).filter((v) => v === value).length])));
+    }
+
+    const node = el('div', { class: 'lk-plate-editor' }, [
+      el('div', { class: 'lk-plate-bar' }, [
+        formatSelect, columnSelect, labelBox,
+        el('button', { class: 'small', text: 'set',
+          title: 'Label the selected wells. An empty label clears them.', onclick: assign }),
+        el('button', { class: 'ghost small', text: 'load…',
+          title: 'Open a saved layout (plate_layout.json, or a layout saved by Scrambler).',
+          onclick: () => fileBox.click() }),
+        el('button', { class: 'ghost small', text: 'save…',
+          title: 'Download this layout as plate_layout.json.',
+          onclick: () => {
+            const link = el('a', { download: 'plate_layout.json', href: URL.createObjectURL(
+              new Blob([JSON.stringify(layout, null, 1)], { type: 'application/json' })) });
+            link.click();
+            URL.revokeObjectURL(link.href);
+          } }),
+        fileBox,
+      ]),
+      grid, legend,
+    ]);
+    paint();
+    if (host) host.appendChild(node);
+    return { node, layout };
   };
 
   // ------------------------------------------------------------ toolbars ---

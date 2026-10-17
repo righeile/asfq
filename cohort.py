@@ -96,7 +96,7 @@ _KIDNEY_REGIONS = [
     ("cortex",        r"\b(ctx|cortex|cortical)\b"),
 ]
 
-# A genotype token is recognised by the vocabulary breeders actually use.
+# A genotype token is recognized by the vocabulary breeders actually use.
 _GENOTYPE_HINT = re.compile(
     r"(\bKO\b|\bWT\b|\bHET\b|\bHOM\b|\bCTRL\b|\bcontrol\b|"
     r"[-+]/[-+]|\bfl/fl\b|\bflox)", re.IGNORECASE)
@@ -215,7 +215,7 @@ def parse_section_name(name: str, folder: str = "",
         if _find_segment(tok, organ) and not meta.segment:
             meta.segment, _ = _find_segment(tok, organ), claimed.add(i)
             continue
-        # "L8D-E-KO, 32W" -- genotype and age travelling together.
+        # "L8D-E-KO, 32W" -- genotype and age traveling together.
         if "," in tok:
             head, _, tail = tok.partition(",")
             age = re.search(r"(\d+)\s*([WwMmDd])\b", tail)
@@ -249,6 +249,14 @@ def parse_section_name(name: str, folder: str = "",
 #: The fields ``metadata.csv`` may carry, and the only ones written back into
 #: it.  Blank means "no override": whatever the name parser worked out stands.
 OVERRIDE_FIELDS = ("mouse", "genotype", "age", "segment", "slide", "section")
+
+#: What a figure may put on its x axis.  Genotype is the default and the reason
+#: the app exists; age is here because baseline wall composition moves with age
+#: further than most genotypes move it within one age, so a cohort that spans
+#: two ages often wants the calendar on the axis and the genotype held still.
+#: ``pool`` carries these through to the pooled tables so the figure can reach
+#: them without re-reading the section table; ``mouse`` is already a column.
+GROUP_FIELDS = ("genotype", "age")
 
 
 def segment_names(organ: str = "aorta") -> list[str]:
@@ -491,8 +499,8 @@ READOUTS = [
 # -- what differs between organs, and what does not --------------------------
 #
 # An aorta is measured along a wall and a heart is measured over an area, so
-# the integrals differ: one divides by millimetres of wall, the other by
-# square millimetres of tissue.  Everything above that is the same argument
+# the integrals differ: one divides by millimeters of wall, the other by
+# square millimeters of tissue.  Everything above that is the same argument
 # and so is the same code -- pool by summing integrals rather than averaging
 # ratios, then compare with the mouse as the unit.  A scheme is just the pair
 # of organ-specific lists, so the ladder itself is written once.
@@ -657,7 +665,7 @@ def _extensive_wall(df: pd.DataFrame) -> pd.DataFrame:
     """
     Fill in the extensive columns a single-section result does not carry.
 
-    ``collagen_area_um2_per_mm_length`` is reported per millimetre because that
+    ``collagen_area_um2_per_mm_length`` is reported per millimeter because that
     is the comparable form; pooling needs it back as a total.
     """
     df = df.copy()
@@ -815,6 +823,16 @@ def pool(df: pd.DataFrame, by: Sequence[str],
     for values, part in work.groupby(keys, dropna=False, sort=True):
         values = values if isinstance(values, tuple) else (values,)
         row: dict[str, Any] = dict(zip(keys, values))
+        # Metadata that is constant within the group travels with it, so a
+        # figure can group on age without going back to the section table.
+        # One value or nothing: a mouse whose sections disagree about its age
+        # is "unknown" here, not whichever of them happened to sort first.
+        for col in GROUP_FIELDS:
+            if col in keys or col not in work.columns:
+                continue
+            seen = {v for v in part[col].fillna("").astype(str)
+                    if v and v != "unknown"}
+            row[col] = seen.pop() if len(seen) == 1 else "unknown"
         for col in sch.extensive:
             # A quantity nobody measured stays NaN; summing it as zero would
             # turn a missing column into a confident zero downstream.
@@ -929,9 +947,15 @@ def per_genotype(mouse_rows: pd.DataFrame, readouts: Sequence[str] = READOUTS) -
 
 
 def compare_genotypes(mouse_rows: pd.DataFrame,
-                      readouts: Sequence[str] = READOUTS) -> pd.DataFrame:
+                      readouts: Sequence[str] = READOUTS,
+                      by: str = "genotype") -> pd.DataFrame:
     """
     Every pair of genotypes, per segment, per readout.
+
+    *by* names the column the groups come from -- ``"age"`` compares age
+    groups by the same test.  The two columns are called ``genotype_a`` and
+    ``genotype_b`` whatever it is, because the file on disk has carried those
+    names since before there was a choice and the figure reads them back.
 
     Welch's t-test, which does not assume the two groups have the same
     variance -- with three or four mice a side you cannot check that
@@ -940,15 +964,16 @@ def compare_genotypes(mouse_rows: pd.DataFrame,
     animals has no p-value, only a direction.
     """
     rows: list[dict[str, Any]] = []
+    by = by if by in mouse_rows.columns else "genotype"
     seg_col = "segment" if "segment" in mouse_rows.columns else None
     segments = sorted(mouse_rows[seg_col].astype(str).unique()) if seg_col else [""]
     for seg in segments:
         part = mouse_rows[mouse_rows[seg_col].astype(str) == seg] if seg_col else mouse_rows
-        genos = sorted(part["genotype"].astype(str).replace("", "unknown").unique())
+        genos = sorted(part[by].astype(str).replace("", "unknown").unique())
         for i, g1 in enumerate(genos):
             for g2 in genos[i + 1:]:
-                a_rows = part[part["genotype"].astype(str) == g1]
-                b_rows = part[part["genotype"].astype(str) == g2]
+                a_rows = part[part[by].astype(str) == g1]
+                b_rows = part[part[by].astype(str) == g2]
                 for readout in readouts:
                     if readout not in part.columns:
                         continue
@@ -1143,7 +1168,7 @@ LABELS: dict[str, tuple[str, float]] = {
     "tissue_area_mm2":              ("tissue measured\n(mm²)", 1.0),
 }
 
-# The colours, the style, the point layout and the significance brackets are
+# The colors, the style, the point layout and the significance brackets are
 # all labkit's now, so a cohort figure and a vesicle figure are the same
 # figure with different numbers in it.
 from labkit import plots as LKP
@@ -1159,20 +1184,35 @@ UNIT_TABLE = {"mouse_segment": "by_mouse_segment",
               "section": "sections"}
 
 
-def genotypes_in(tables: dict[str, pd.DataFrame], unit: str = "mouse_segment"
-                 ) -> list[str]:
-    """The genotype labels a figure of this unit will draw, in drawing order.
+def group_options(tables: dict[str, pd.DataFrame], unit: str = "mouse_segment",
+                  by: str = "genotype") -> dict:
+    """What a figure of this unit can group on, and the groups *by* gives it.
 
-    The web panel needs them before the figure exists, to offer a colour box
-    per genotype; the figure needs them to hand the same genotype the same
-    colour in every panel.  One function, so the boxes cannot end up naming
-    something the figure does not draw.
+    The web panel needs both before the figure exists: the fields to offer in
+    the "bars are" box, and the labels to put a color box against.  One
+    function with :func:`plot_cohort`'s own fallback in it, so the boxes cannot
+    end up naming something the figure does not draw -- which is the whole
+    point of coloring by name rather than by position.
+
+    A field with one value is not offered, because splitting on it draws the
+    figure that is already on screen; genotype stays on the list regardless,
+    since it is the default and an empty box is worse than a pointless one.
     """
     df = tables.get(UNIT_TABLE.get(unit, "by_mouse_segment"))
-    if df is None or "genotype" not in getattr(df, "columns", ()):
-        return []
-    labels = df["genotype"].fillna("").astype(str).replace("", "unknown")
-    return sorted(set(labels))
+    cols = getattr(df, "columns", ())
+    if df is None or not len(df):
+        return {"fields": [], "group_by": "genotype", "groups": []}
+
+    def labels(col):
+        return df[col].fillna("").astype(str).replace("", "unknown")
+
+    # Not "segment": the panels are already split on it, so grouping by it too
+    # would draw one bar per panel.
+    fields = [c for c in (*GROUP_FIELDS, "mouse")
+              if c in cols and (c == "genotype" or labels(c).nunique() > 1)]
+    by = by if by in fields else (fields[0] if fields else "genotype")
+    return {"fields": fields, "group_by": by,
+            "groups": sorted(set(labels(by))) if by in cols else []}
 
 
 def _panel_comparisons(comp: pd.DataFrame, segment: str, readout: str,
@@ -1242,7 +1282,7 @@ def _fit_group_labels(fig) -> None:
 
     The rung is the figure's, not each panel's: the same genotypes are under
     every panel of a cohort figure, and one of them tilted further than its
-    neighbours reads as if it meant something.
+    neighbors reads as if it meant something.
     """
     # Cost in readability, cheapest first.
     LADDER = ((30, 1.0), (45, 1.0), (60, 1.0), (90, 1.0), (90, 0.8), (90, 0.65))
@@ -1265,7 +1305,7 @@ def _fit_group_labels(fig) -> None:
             boxes = sorted((t.get_window_extent() for t in ticks), key=lambda b: b.x0)
         except Exception:
             return False
-        # One pixel of air between neighbours; touching is already too close.
+        # One pixel of air between neighbors; touching is already too close.
         return any(a.x1 > b.x0 - 1.0 for a, b in zip(boxes, boxes[1:]))
 
     if not drawn():
@@ -1274,7 +1314,7 @@ def _fit_group_labels(fig) -> None:
     for ax in fig.axes:
         # Every panel with labels, not only the ones that collide: a panel
         # whose segment has a single genotype cannot collide, and left behind
-        # flat while its neighbours turned it reads as a statement about that
+        # flat while its neighbors turned it reads as a statement about that
         # segment.  ``collides`` still ignores it, so it follows and never
         # drives.
         if ax.axison and any(t.get_text() for t in ax.get_xticklabels()):
@@ -1303,6 +1343,7 @@ def plot_cohort(
     tables: dict[str, pd.DataFrame],
     readouts: Sequence[str] | None = None,
     unit: str = "mouse_segment",
+    by: str = "genotype",
     spec: PlotSpec | dict | None = None,
     title: str = "",
     panel_mm: float = 0.0,
@@ -1323,8 +1364,18 @@ def plot_cohort(
 
     ``unit`` is ``'mouse_segment'`` (a dot per mouse, panels split by segment),
     ``'mouse'`` (a dot per mouse, all segments pooled) or ``'section'``.
+
+    ``by`` is what the bars are -- the column the groups come from.  Genotype
+    by default and the reason the app exists, but a cohort that spans two ages
+    often wants the calendar on the axis instead, and ``'mouse'`` draws one bar
+    per animal.  Everything follows that one name: the x tick labels, the
+    colors (which are keyed by group *name*, so ``spec.colours`` from a saved
+    scheme lands on the right bar), and the significance brackets, which are
+    recomputed for the chosen field rather than read out of a comparison table
+    that was made on genotype.  :func:`group_options` says what a table can
+    offer, with the same fallback, so the panel and the figure agree.
     Everything else -- the shape, the error bars, the point layout, the
-    colours, and whether and how p-values are printed -- comes from ``spec``,
+    colors, and whether and how p-values are printed -- comes from ``spec``,
     which is the same :class:`labkit.plots.PlotSpec` the other tools take, so
     the controls in the side panel are the controls in the other side panels.
 
@@ -1340,7 +1391,7 @@ def plot_cohort(
     readout above it has a long name (see :func:`labkit.plots.fit_axes`).
     Either falls back to ``spec.axes_width_mm``/``axes_height_mm`` -- the same
     control, coming from the shared plot panel -- and then to the old
-    behaviour: the width from ``spec``, split between up to three columns,
+    behavior: the width from ``spec``, split between up to three columns,
     with panels slightly wider than they are tall.
     """
     import matplotlib.pyplot as plt
@@ -1363,14 +1414,18 @@ def plot_cohort(
     if df is None or not len(df):
         raise ValueError(f"no rows in the {source} table to plot")
     df = df.copy()
-    # A table read back from CSV has not been through summarise(), so fill in
+    # A table read back from CSV has not been through summarize(), so fill in
     # any readout that is only assembled on the way up.  Harmless for the
     # pooled tables, which already carry all of them.
     try:
         df = add_readouts(df)
     except Exception:
         pass
-    for col in ("genotype", "segment"):
+    # A field the table does not carry is not a figure, it is a crash three
+    # lines down; falling back to the genotype draws the default figure, which
+    # is what the panel was showing before the request went out.
+    by = by if by in df.columns else "genotype"
+    for col in dict.fromkeys((by, "genotype", "segment")):
         if col not in df.columns:
             df[col] = "unknown"
         df[col] = df[col].fillna("").astype(str).replace("", "unknown")
@@ -1383,14 +1438,26 @@ def plot_cohort(
                          + ", ".join(wanted))
 
     segments = sorted(df["segment"].unique())
-    genotypes = sorted(df["genotype"].unique())
+    # Sorted, then put in the sequence the panel asked for: sorting is a
+    # fallback and a poor one -- it puts the wild type after the mutants.  The
+    # palette below is keyed off this list, so the order has to be settled
+    # before the colors are handed out or a group gets its neighbour's red.
+    levels = LKP.order_series(sorted(df[by].unique()), spec.order)
     from fibrosis import counterstain_name
     counterstain = counterstain_name(organ) if organ else "muscle"
-    # Fixed to the genotype, not to its position in the panel: a panel that is
-    # missing a genotype used to shift every colour after it, so the same
-    # animal group was grey in one panel of a figure and red in the next.
-    palette = dict(zip(genotypes, LKP.colours_for(spec, genotypes)))
+    # Fixed to the group's name, not to its position in the panel: a panel that
+    # is missing a group used to shift every color after it, so the same
+    # animals were gray in one panel of a figure and red in the next.  It is
+    # also what makes a color scheme saved on one figure land correctly on the
+    # next one, and what the color boxes in the web panel set.
+    palette = dict(zip(levels, LKP.colours_for(spec, levels)))
     comp = tables.get("comparison")
+    if by != "genotype":
+        # The table on disk was computed on genotype, so its brackets name
+        # groups that are not on this x axis.  Same test, same rows the bars
+        # are drawn from -- but made here, because a bracket over the wrong
+        # pair is worse than no bracket.
+        comp = compare_genotypes(df, readouts, by=by)
 
     # One panel per readout *per segment*: a shared x axis of segments with
     # grouped bars cannot carry a significance bracket per segment without the
@@ -1404,7 +1471,10 @@ def plot_cohort(
     # This is only the starting canvas; fit_axes below settles it on the real
     # plotting area once the labels that eat into it are on the figure.
     want_w = float(panel_mm or spec.axes_width_mm or 0.0)
-    want_h = float(panel_h_mm or spec.axes_height_mm or 0.0)
+    # 1.2 in of value axis unless something asked for another number -- the
+    # same length every other panel of the figure gets, and the same one
+    # labkit prints.  See labkit.plots.AXES_LENGTH_MM.
+    want_h = float(panel_h_mm or spec.axes_height_mm or LKP.AXES_LENGTH_MM)
     panel_w = max(spec.width_mm, 40.0) * LKP.MM / ncol
     panel_h = panel_w * 0.92
 
@@ -1419,19 +1489,19 @@ def plot_cohort(
             label, scale = LABELS.get(readout, (readout.replace("_", " "), 1.0))
             # The column names are the aorta's, where the red channel really is
             # muscle.  In a kidney it is tubular epithelium, and an axis
-            # labelled "muscle" over a kidney is a wrong statement printed on a
+            # labeled "muscle" over a kidney is a wrong statement printed on a
             # figure -- worse than a clumsy one, because it will be believed.
             if counterstain and counterstain != "muscle":
                 label = label.replace("muscle", counterstain)
             here = df[df.segment == segment] if segment else df
             groups = {}
-            for genotype in genotypes:
+            for level in levels:
                 values = pd.to_numeric(
-                    here[here.genotype == genotype][readout],
+                    here[here[by] == level][readout],
                     errors="coerce").to_numpy(dtype=float) * scale
                 values = values[np.isfinite(values)]
                 if values.size:
-                    groups[genotype] = values
+                    groups[level] = values
             if not groups:
                 ax.axis("off")
                 continue
@@ -1463,6 +1533,9 @@ def plot_cohort(
                "ci": f"{centre}, 95% CI", "none": centre}[spec.error]
         fig.suptitle(title or spec.title or "Cohort summary")
         foot = f"{dot} \u00b7 {err}"
+        if by != "genotype":
+            # The tick labels say "32W"; only the figure can say that is an age.
+            foot += f" \u00b7 grouped by {by}"
         if spec.show_p and comp is not None and len(comp):
             correction = {"fdr_bh": "FDR-corrected", "holm": "Holm-corrected",
                           "bonferroni": "Bonferroni-corrected",
@@ -1489,7 +1562,7 @@ def plot_cohort(
     return fig
 
 
-#: Muscle red and collagen blue, the colours the section figure draws them in
+#: Muscle red and collagen blue, the colors the section figure draws them in
 #: (``wall_analysis.plot_wall_report``), so a cohort curve and the section it
 #: came from are read the same way round.
 STAIN_COLOURS = {"muscle_mean": "#d1382f", "collagen_mean": "#2c7fb8"}
@@ -1498,13 +1571,13 @@ STAIN_COLOURS = {"muscle_mean": "#d1382f", "collagen_mean": "#2c7fb8"}
 def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
                         title: str = "", counterstain: str = "muscle",
                         panel_mm: float = 0.0, panel_h_mm: float = 0.0,
-                        stains_together: bool = False):
+                        by: str = "genotype", stains_together: bool = False):
     """
     The stain curves through the wall: one row per region and age, genotypes
     overlaid, the counterstain and the collagen side by side.
 
     Two panels rather than one, because a single axis carrying both stains for
-    every genotype is four curves in two different meanings of colour and
+    every genotype is four curves in two different meanings of color and
     nobody reads it.  x is relative depth -- 0 the lumen, 1 the
     media/adventitia junction -- so "a third of the way through the media" is
     the same place in a thick wall and a thin one, which is the whole reason
@@ -1512,11 +1585,18 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
     depth, so it is biological spread and not the variation along one wall.
 
     ``stains_together`` turns the grid the other way up: a panel per condition
-    with both stains in it, coloured as the section figure colours them.  That
+    with both stains in it, colored as the section figure colors them.  That
     is the figure for "where in this wall is the collagen relative to the
-    muscle", which is a question inside one genotype -- colour still means one
+    muscle", which is a question inside one genotype -- color still means one
     thing per panel, which was the objection to overlaying all four curves.
     The default grid stays the one for comparing genotypes.
+
+    ``by`` is what the overlaid curves are, as in :func:`plot_cohort`, and it
+    leaves the panel grid: splitting on age *and* overlaying it would draw one
+    curve per panel.  Only what the averaged table still carries can be chosen
+    -- ``average_depth_profile`` has already pooled the mice away, so grouping
+    this figure by mouse falls back to the genotype rather than inventing a
+    spread between animals that is not in the table.
 
     *avg* is what ``average_depth_profile`` returns.
     """
@@ -1530,7 +1610,13 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
         if k in avg.columns:
             avg[k] = avg[k].fillna("").astype(str).replace("", "unknown")
     spec = spec or PlotSpec()
-    facets = [k for k in ("segment", "age") if k in avg.columns]
+    by = by if by in avg.columns else "genotype"
+    # Everything the table is held apart on except the thing being compared.
+    # Re-pooling is not on offer here -- the mice were averaged away when this
+    # table was written -- so the key that stops being the comparison has to
+    # become a panel, or one series would quietly be two curves at the same
+    # depths with each other's n printed beside them.
+    facets = [k for k in DEPTH_KEYS if k in avg.columns and k != by]
     measures = [(m, m.replace("_mean", "_sd"), lbl) for m, lbl in
                 (("muscle_mean", counterstain or "muscle"),
                  ("collagen_mean", "collagen")) if m in avg.columns]
@@ -1539,8 +1625,8 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
                          "collagen_mean -- it is not an averaged depth profile")
     groups = (list(avg.groupby(facets, dropna=False, sort=True)) if facets
               else [((), avg)])
-    genotypes = sorted(avg["genotype"].unique()) if "genotype" in avg.columns else [""]
-    # By name, so a panel a genotype is missing from does not recolour the rest.
+    genotypes = sorted(avg[by].unique()) if by in avg.columns else [""]
+    # By name, so a panel a group is missing from does not recolor the rest.
     palette = dict(zip(genotypes, LKP.colours_for(spec, genotypes)))
 
     def _where(values) -> str:
@@ -1548,10 +1634,10 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
         return " · ".join(str(v) for v in values if str(v) != "unknown")
 
     def _curves(part, pairs) -> tuple[list, list]:
-        """The series for one panel, and the colour of each."""
+        """The series for one panel, and the color of each."""
         series, colours = [], []
         for (mean_col, sd_col, label), genotype in pairs:
-            here = (part[part.genotype == genotype] if "genotype" in part.columns
+            here = (part[part[by] == genotype] if by in part.columns
                     else part).sort_values("depth_relative")
             if not len(here):
                 continue
@@ -1574,7 +1660,7 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
     # curves in eighteen slots is holes with a figure round them.
     panels: list[tuple[str, list, list]] = []
     if stains_together:
-        keys = facets + (["genotype"] if "genotype" in avg.columns else [])
+        keys = facets + ([by] if by in avg.columns else [])
         for values, part in (avg.groupby(keys, dropna=False, sort=True) if keys
                              else [((), avg)]):
             genotype = (values if isinstance(values, tuple) else (values,))[-1] if keys else ""
@@ -1592,7 +1678,10 @@ def plot_depth_profiles(avg: pd.DataFrame, *, spec: PlotSpec | None = None,
     nrow = -(-len(panels) // ncol)
 
     want_w = float(panel_mm or spec.axes_width_mm or 0.0)
-    want_h = float(panel_h_mm or spec.axes_height_mm or 0.0)
+    # 1.2 in of value axis unless something asked for another number -- the
+    # same length every other panel of the figure gets, and the same one
+    # labkit prints.  See labkit.plots.AXES_LENGTH_MM.
+    want_h = float(panel_h_mm or spec.axes_height_mm or LKP.AXES_LENGTH_MM)
     panel_w = max(spec.width_mm, 40.0) * LKP.MM / ncol
     panel_h = panel_w * 0.78
 
@@ -1645,12 +1734,18 @@ def save_depth_plot(avg: pd.DataFrame, out_dir: str | Path,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     fig = plot_depth_profiles(avg, **kwargs)
-    png, svg = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.svg"
+    png, pdf = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.pdf"
     fig.savefig(png, dpi=150, bbox_inches="tight")
-    with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(svg, bbox_inches="tight")
+    # PDF, not SVG: the vector a journal asks for, one file rather than a file
+    # plus the reader's fonts.  `pdf.fonttype: 42` embeds the TrueType outlines
+    # instead of tracing every glyph as a curve, so the labels stay editable
+    # text -- the same promise `svg.fonttype: "none"` made for SVG.  Set here
+    # as well as in labkit's global rcParams, so this is still true when the
+    # module is driven from a script that never imported labkit.plots.
+    with plt.rc_context({"pdf.fonttype": 42}):
+        fig.savefig(pdf, bbox_inches="tight")
     plt.close(fig)
-    return {"png": str(png), "svg": str(svg)}
+    return {"png": str(png), "pdf": str(pdf)}
 
 
 def save_cohort_plot(tables: dict[str, pd.DataFrame], out_dir: str | Path,
@@ -1661,11 +1756,15 @@ def save_cohort_plot(tables: dict[str, pd.DataFrame], out_dir: str | Path,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     fig = plot_cohort(tables, **kwargs)
-    png, svg = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.svg"
+    png, pdf = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.pdf"
     fig.savefig(png, dpi=150, bbox_inches="tight")
-    # Real <text>, not matplotlib's default of every glyph traced out as its
-    # own curve -- the labels can then be edited as text in a vector editor.
-    with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(svg, bbox_inches="tight")
+    # PDF, not SVG: the vector a journal asks for, one file rather than a file
+    # plus the reader's fonts.  `pdf.fonttype: 42` embeds the TrueType outlines
+    # instead of tracing every glyph as a curve, so the labels stay editable
+    # text -- the same promise `svg.fonttype: "none"` made for SVG.  Set here
+    # as well as in labkit's global rcParams, so this is still true when the
+    # module is driven from a script that never imported labkit.plots.
+    with plt.rc_context({"pdf.fonttype": 42}):
+        fig.savefig(pdf, bbox_inches="tight")
     plt.close(fig)
-    return {"png": str(png), "svg": str(svg)}
+    return {"png": str(png), "pdf": str(pdf)}

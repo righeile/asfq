@@ -20,9 +20,9 @@ This module instead uses
 *  an **optical-density** registration signal that is exactly zero on blank
    slide, high-pass filtered so uneven illumination between snapshots cannot
    drive the match;
-*  **masked normalised cross-correlation evaluated by FFT** (Padfield 2012), so
+*  **masked normalized cross-correlation evaluated by FFT** (Padfield 2012), so
    every integer translation is scored at once, in O(n log n), with the
-   normalisation computed only over the pixels where *both* tiles carry tissue.
+   normalization computed only over the pixels where *both* tiles carry tissue.
    Background contributes nothing, because it is outside the mask;
 *  a **confidence model** -- peak height, peak-to-second-peak ratio, overlapping
    tissue area -- so the assembler can tell "this is certainly the right
@@ -126,7 +126,7 @@ def read_rgb(path: str | Path) -> tuple[np.ndarray, float | None]:
     """
     Read one tile as an ``(H, W, 3)`` array plus its pixel size in microns.
 
-    The array keeps its native dtype; ``to_float_rgb`` normalises it later.
+    The array keeps its native dtype; ``to_float_rgb`` normalizes it later.
     Returns ``pixel_size_um = None`` when the format carries no scale.
     """
     path = Path(path)
@@ -175,7 +175,7 @@ def _read_tiff(path: Path) -> tuple[np.ndarray, float | None]:
                 num, den = (xres if isinstance(xres, tuple) else (xres, 1))
                 if num:
                     per_unit = float(den) / float(num)
-                    # 2 = inch, 3 = centimetre
+                    # 2 = inch, 3 = centimeter
                     if unit == 2:
                         px_um = per_unit * 25400.0
                     elif unit == 3:
@@ -369,7 +369,7 @@ def build_reg_level(
     Turn a tile into (signal, mask) at *scale*.
 
     The signal is the high-pass filtered total optical density, zeroed outside
-    the tissue mask.  The mask is what masked NCC normalises over.
+    the tissue mask.  The mask is what masked NCC normalizes over.
     """
     small = resize(rgb01, scale, "area") if scale != 1.0 else rgb01
     od = optical_density(small, white=white if white is not None else estimate_white(rgb01, 99.5))
@@ -390,14 +390,14 @@ def remask_level(level: RegLevel, threshold: float, highpass_sigma: float = 6.0)
     sig = high_pass(od_sum, highpass_sigma)
     sig = np.where(mask, sig, 0.0).astype(np.float32)
     # A slight dilation of the mask keeps the tissue edge -- a very informative
-    # feature -- inside the normalisation window.
+    # feature -- inside the normalization window.
     mask = ndi.binary_dilation(mask, structure=np.ones((3, 3)), iterations=2)
     return RegLevel(scale=level.scale, signal=sig, mask=mask, shape=sig.shape[:2],
                     od_sum=od_sum, threshold=float(threshold))
 
 
 # =============================================================================
-# 3.  Masked normalised cross-correlation by FFT  (Padfield 2012)
+# 3.  Masked normalized cross-correlation by FFT  (Padfield 2012)
 # =============================================================================
 
 
@@ -550,7 +550,7 @@ def peak_with_confidence(
     is needed, because that is where the tiles stop overlapping properly.
 
     So the runner-up is taken from outside the winner's own crest, not merely
-    outside a small box.  Walking the crest costs an extra labelling of the
+    outside a small box.  Walking the crest costs an extra labeling of the
     map, so it is only done when the box already says the match is
     unconvincing.
     """
@@ -796,7 +796,7 @@ class TileSet:
 
         # One tissue threshold for the whole set.  Choosing it per tile looks
         # harmless and is not: the cut then depends on how much tissue happens to
-        # be in that frame, so two correctly-placed neighbours can disagree about
+        # be in that frame, so two correctly-placed neighbors can disagree about
         # where the tissue is and be reported as contradicting each other.  On a
         # synthetic set with known positions, per-tile thresholds produced
         # exactly that -- mask agreement 0.25 between two tiles placed to within
@@ -895,7 +895,7 @@ class TileSet:
         The registration level of one tile at *scale*, built once and kept.
 
         Refinement and snapping both work pair by pair, so the same tile is
-        asked for as many times as it has neighbours: a 60-tile section
+        asked for as many times as it has neighbors: a 60-tile section
         refines ~200 pairs, which is ~400 requests for 60 distinct levels,
         each costing a re-read of the file and a quarter of a second of
         filtering.  Least-recently-used with a byte budget, because the levels
@@ -921,7 +921,7 @@ class TileSet:
             if mine:
                 pending = self._levels_pending[key] = Future()
         if not mine:
-            # Neighbouring pairs go to different threads, so half a dozen of
+            # Neighboring pairs go to different threads, so half a dozen of
             # them ask for the same tile within the same instant.  Waiting for
             # the one build costs less than running six: 60 tiles were built
             # 161 times before this.
@@ -995,7 +995,7 @@ def _quality(ncc: float, peak_ratio: float, overlap_frac: float, p: StitchParams
 
 
 def _rotate_level(level: RegLevel, deg: float) -> RegLevel:
-    """Rotate a registration level about its centre, keeping the canvas size."""
+    """Rotate a registration level about its center, keeping the canvas size."""
     if abs(deg) < 1e-6:
         return level
     h, w = level.shape
@@ -1261,7 +1261,7 @@ class Pose:
 
     x: float = 0.0  # position of the tile's top-left corner (before rotation)
     y: float = 0.0
-    theta: float = 0.0  # degrees, about the tile centre
+    theta: float = 0.0  # degrees, about the tile center
     island: int = 0
     placed: bool = False
     locked: bool = False  # a human put it there; auto-solve must not move it
@@ -1270,7 +1270,7 @@ class Pose:
         return asdict(self)
 
 def _coarse_of(ts: "TileSet", idx: int, theta: float, _cache: dict) -> RegLevel:
-    """Coarse registration level of a tile at a given rotation, memoised."""
+    """Coarse registration level of a tile at a given rotation, memoized."""
     key = (idx, round(float(theta), 3))
     lvl = _cache.get(key)
     if lvl is None:
@@ -1354,7 +1354,7 @@ def _contradicts(
     Is this pair of placements mutually impossible?
 
     Two tiles placed in a mosaic make a claim about the same physical piece of
-    slide, so they must agree about it.  Disagreement comes in two flavours and
+    slide, so they must agree about it.  Disagreement comes in two flavors and
     both are checked, because either alone lets a bad layout through.
 
     *Where is the tissue?*  ``mask_iou`` compares the two tiles' tissue masks
@@ -1371,7 +1371,7 @@ def _contradicts(
     -0.02-0.38 on collisions.
 
     Overlaps too small or too empty to carry information are not judged; they
-    return ``False`` and the decision rests on other neighbours.
+    return ``False`` and the decision rests on other neighbors.
     """
     n_both, n_a, n_b = ag["n_both"], ag["n_a"], ag["n_b"]
     big = max(n_a, n_b)
@@ -1865,8 +1865,8 @@ def layout_qc(
 
     Every pair of tiles whose footprints overlap is re-scored at the offset the
     layout implies.  A tile's score is the tissue-weighted mean agreement with
-    its neighbours; ``n_conflicts`` counts neighbours it flatly contradicts.
-    The browser canvas colours tiles by this, so a bad placement is visible
+    its neighbors; ``n_conflicts`` counts neighbors it flatly contradicts.
+    The browser canvas colors tiles by this, so a bad placement is visible
     without hunting for it.
     """
     cache: dict = {}
@@ -2253,7 +2253,7 @@ def settle_sliver_joins(
     that pulls the group along the wall until the gap left by a deleted
     snapshot has closed.  On one aortic arch it dropped a twenty-tile lumen
     640 px too low, and every seam still read ncc > 0.7 -- each was measured
-    against its own neighbour, and the whole group had moved together.
+    against its own neighbor, and the whole group had moved together.
 
     The tissue elsewhere knows better.  The group is rigid, so wherever else it
     comes close to the rest of the mosaic the wall has to continue: follow the
@@ -2461,7 +2461,7 @@ def snap_tile(
     so the human's decision cannot be silently overruled.
 
     ``exclude`` drops tiles from the vote.  It matters when several tiles are
-    being aligned together: a tile must not be settled against neighbours that
+    being aligned together: a tile must not be settled against neighbors that
     are themselves still in the wrong place, or the group simply agrees with its
     own error.  Moving three tiles 90 px and aligning them as a set recovers only
     a third of the offset without this, and all of it with.
@@ -2477,8 +2477,8 @@ def snap_tile(
     ]
     cands = [k for k in cands if k not in banned]
     if not cands:
-        reason = ("every overlapping neighbour is also being aligned; "
-                  "align them as an island instead") if banned else "no overlapping neighbour"
+        reason = ("every overlapping neighbor is also being aligned; "
+                  "align them as an island instead") if banned else "no overlapping neighbor"
         return Pose(**{**asdict(me), "placed": True}), {"ok": False, "reason": reason}
 
     cands.sort(key=lambda k: -_overlap_area(poses[k], ts.tiles[k], me, ti))
@@ -2794,7 +2794,7 @@ def snap_selection(
     90 px this way recovers a third of the offset; excluding the siblings
     recovers all of it.
 
-    Tiles whose only neighbours are siblings therefore cannot move on the first
+    Tiles whose only neighbors are siblings therefore cannot move on the first
     pass.  They can on the second: a sibling that has already been settled is a
     good anchor, so the set converges outwards from wherever it touches fixed
     ground.  Anything still without an anchor after the last pass is left where
@@ -2854,7 +2854,7 @@ def snap_all(
     progress: Callable[[float, str], None] | None = None,
 ) -> list[Pose]:
     """
-    Re-align every non-locked tile against its current neighbours, repeatedly.
+    Re-align every non-locked tile against its current neighbors, repeatedly.
 
     Think of it as relaxation: after the global solve or a batch of manual
     drags, each tile is nudged toward agreement with the tiles it touches.

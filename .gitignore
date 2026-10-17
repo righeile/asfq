@@ -1,7 +1,7 @@
 # Python environment.  Built by the launcher on first run from
 # requirements.txt, so it is reproducible and has no business in the repo --
 # it is also by far the largest thing in the folder.
-.venv/
+.venv
 venv/
 env/
 

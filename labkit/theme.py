@@ -76,7 +76,12 @@ SCREEN: dict[str, str] = {
 
     "radius":   "5px",
     "radius-l": "8px",
-    "font":     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    # PT Sans and PT Serif are one family, drawn to the same metrics and
+    # weights, so prose set in the serif sits beside a sans control without
+    # either looking borrowed. macOS ships both; the rest of each stack is for
+    # a machine that does not have them.
+    "font":     '"PT Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    "serif":    '"PT Serif", Georgia, "Times New Roman", Times, serif',
     "mono":     "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 }
 
@@ -138,15 +143,19 @@ SERIES: list[str] = [
 
 SERIES_NAMES = ["grey", "red", "blue", "tan", "violet", "green", "black", "rose"]
 
-#: The rest of the ink in a figure.  Nothing here is pure black: 100 % K next
-#: to a gray series reads as a hole on paper.
+#: The rest of the ink in a figure.  Black, because the lab's own figures are
+#: drawn in black (`mpl.rcParams['axes.edgecolor'] = 'k'` and the rest of the
+#: block in `voltage_clamp_processing.py`), and a panel from an app has to sit
+#: beside one from that notebook without the axes being a different colour.
 PRINT: dict[str, str] = {
-    "ink":      "#1f2933",   # axes, ticks, labels, annotation text
-    "rule":     "#1f2933",   # significance brackets
+    "ink":      "#000000",   # axes, ticks, labels, annotation text
+    "rule":     "#000000",   # significance brackets
     "grid":     "#c9ced4",
     "muted":    "#6b7480",   # footnotes, "n = " captions
-    "point_edge": "#2b2f36", # outline on a jittered data point
-    "point_face": "#ffffff", # its fill -- open circles do not blot out the bar
+    # A point is filled in its group's colour; this is the hairline halo round
+    # it, which is what separates two dots that land on each other.
+    "point_edge": "#ffffff", # the halo
+    "point_face": "#ffffff", # kept for callers that draw an open circle
     "warn":     "#8c1d18",   # a caption that needs to be read
     "paper":    "#ffffff",
 }

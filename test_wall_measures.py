@@ -140,7 +140,7 @@ def test_spacing_recovers_a_known_lamellar_period() -> None:
         prof = 1.0 + 0.4 * np.cos(2 * np.pi * d / period)
         sp, _, _ = WA.lamellar_geometry(*_wall(prof), p)
         got = float(np.nanmedian(sp))
-        # The profile is sampled at 0.5 um, so the peak positions quantise.
+        # The profile is sampled at 0.5 um, so the peak positions quantize.
         assert abs(got - period) <= 0.5, f"period {period} read as {got}"
 
 
@@ -219,7 +219,7 @@ def _arc(cy, cx, r, half, a0=0.0, span=360.0):
 def test_two_open_walls_are_two_vessels_and_the_larger_is_first() -> None:
     """An arch caught at a branch: two walls, neither closed.
 
-    With no lumen to enumerate them by, the whole band used to be skeletonised
+    With no lumen to enumerate them by, the whole band used to be skeletonized
     as one and the longest path won -- and which wall it came from was settled
     by whichever skeleton endpoint the raster reached first.  The small arc is
     put above the large one here for exactly that reason: it wins that race,
@@ -285,7 +285,7 @@ def test_a_ring_is_one_vessel_not_a_second_piece() -> None:
 
 
 def _patched_wall(patch=None, step=0.5, n_pos=60):
-    """A 41 um media centred on depth 0, adventitia beyond it, lumen below.
+    """A 41 um media centered on depth 0, adventitia beyond it, lumen below.
 
     ``patch`` is a depth range inside the media where collagen outweighs
     muscle -- a focal fibrotic patch, with muscle still plainly present.

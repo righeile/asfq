@@ -26,7 +26,7 @@ clear of the section edge, falls monotonically across a whole kidney section --
 real corticomedullary signal, and :func:`texture_guide` returns it as a picture
 to draw against.  Drawing the boundary yourself while looking at that map is
 the honest version of this feature; the polygons are a starting point and are
-labelled as one.
+labeled as one.
   Everything here comes back as polygons
 into the same editor, to be corrected or thrown away.  That is not modesty
 about the method, it is the only defensible arrangement: there is no public
@@ -95,7 +95,7 @@ class ZoneResult:
 
 
 def _assign(X: np.ndarray, centres: np.ndarray) -> np.ndarray:
-    """Nearest centre for every row, in chunks so a big section still fits."""
+    """Nearest center for every row, in chunks so a big section still fits."""
     out = np.empty(len(X), dtype=np.int16)
     for i in range(0, len(X), 200_000):
         block = X[i:i + 200_000]
@@ -149,7 +149,7 @@ def _coherence(gray: np.ndarray, sigma: float) -> np.ndarray:
     How consistently the local structure points one way, 0..1.
 
     The structure tensor's two eigenvalues are the strength of variation along
-    and across the dominant direction; their normalised difference is high for
+    and across the dominant direction; their normalized difference is high for
     parallel tubules and near zero where the texture has no direction.  This is
     the feature that separates medulla from cortex, and it costs nothing in
     stain calibration because it is a statement about geometry.
@@ -284,14 +284,14 @@ def detect_kidney_zones(
         return ZoneResult(wpx, labels, [], feats, {}, 0, False,
                           "too little tissue to look for zones")
 
-    # Standardised, or `depth` (0..1) would be shouted down by whichever
+    # Standardized, or `depth` (0..1) would be shouted down by whichever
     # feature happens to have the widest raw range.
     mu, sd = X.mean(axis=0), X.std(axis=0)
     Z = (X - mu) / np.where(sd > 1e-9, sd, 1.0)
 
     # How many zones there are is decided on *spatially independent* samples:
     # one per window, on a grid at the window spacing.  Every pixel is not a
-    # sample -- the features are smoothed over that window, so neighbouring
+    # sample -- the features are smoothed over that window, so neighboring
     # pixels carry the same measurement -- and BIC fed a million correlated
     # rows will pick the largest k on offer every time, whatever the tissue
     # looks like.  Measured here: it chose three zones in sixteen of
@@ -314,7 +314,7 @@ def detect_kidney_zones(
             if bic < best_bic:
                 best_k, best_bic = k, bic
         # Chosen on the grid, fitted on everything: the choice needs
-        # independent samples, the centres are better for having all of them.
+        # independent samples, the centers are better for having all of them.
         centres = _fit(Z, best_k)
 
     labels[tis] = _assign(Z, centres) + 1

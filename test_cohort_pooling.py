@@ -256,7 +256,7 @@ def test_every_segment_word_in_use_is_recognised():
     """A folder whose segment nothing claims pools with the unknowns.
 
     That is silent -- the section is measured, reported and averaged, just
-    against the wrong neighbours -- so the vocabulary is checked against the
+    against the wrong neighbors -- so the vocabulary is checked against the
     words the folders actually use rather than against itself.
     """
     for folder, want in [("3690_middle aorta_sec1c", "middle aorta"),
@@ -314,7 +314,7 @@ def test_the_group_labels_stay_apart_on_a_panel_too_narrow_for_them():
     which is the way a size control must never fail -- asking for a smaller
     panel has to make the panel smaller, not make the figure wrong.  So the
     check is the one nobody does by eye: render it, then ask every pair of
-    neighbouring tick labels whether their boxes touch.
+    neighboring tick labels whether their boxes touch.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -389,6 +389,81 @@ def test_a_region_typed_by_hand_survives_a_round_trip_and_keeps_the_rest():
             setattr(meta, field, value)
         assert meta.segment == "middle aorta"
         assert "middle aorta" in CO.segment_names(), "and it is in the offered vocabulary"
+
+
+def test_a_figure_can_be_grouped_by_age_and_the_colour_follows_the_name():
+    """Age survives the pooling, reaches the x axis, and keeps its color.
+
+    The color boxes in the web panel set ``spec.colours`` by *name*, so what
+    can go quietly wrong is a group whose name never reaches the figure: an age
+    dropped in ``pool`` leaves the panel offering a field the plot cannot draw,
+    and a color saved against "32W" then lands on nothing.  So this follows
+    one age the whole way -- section table, pooled table, the offer the panel
+    makes, the tick labels, and the color of the bar itself.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    from matplotlib.colors import to_hex
+
+    rows = []
+    for genotype in ("WT", "KO"):
+        for age in ("12W", "32W"):
+            for i in range(3):
+                rows.append({
+                    "name": f"{genotype}-{age}-{i}",
+                    "mouse": f"{genotype}-{age}-{i}",
+                    "genotype": genotype, "age": age, "segment": "aortic arch",
+                    "wall_length_um": 4000.0, "media_area_um2": 1e5,
+                    # The old animals carry twice the collagen, so the figure
+                    # has something to show and the t-test something to find --
+                    # and the three of them differ, or the test warns that it
+                    # is subtracting identical numbers.
+                    "collagen_od_um2_total": (1e4 * (2.0 if age == "32W" else 1.0)
+                                              * (1.0 + 0.05 * i)),
+                    "muscle_od_um2_total": 1e4,
+                })
+    tables = CO.summarise(pd.DataFrame(rows), "aorta")
+
+    pooled = tables["by_mouse_segment"]
+    assert "age" in pooled.columns, "pool dropped the age -- nothing can group on it"
+    assert set(pooled["age"]) == {"12W", "32W"}
+    assert len(pooled) == 12, "carrying the age must not split a mouse in two"
+
+    offer = CO.group_options(tables, "mouse_segment", "age")
+    assert offer["fields"][:2] == ["genotype", "age"], offer["fields"]
+    assert offer["group_by"] == "age" and offer["groups"] == ["12W", "32W"]
+    # A field this table never carried is not a figure, it is a crash in the
+    # middle of a redraw: the panel and the plot fall back the same way.
+    assert CO.group_options(tables, "mouse_segment", "cage")["group_by"] == "genotype"
+
+    green = "#00aa55"
+    fig = CO.plot_cohort(tables, unit="mouse_segment", by="age",
+                         spec=CO.PlotSpec(colours={"32W": green}),
+                         readouts=["collagen_to_muscle_ratio"])
+    ax = next(a for a in fig.axes if a.axison and a.get_xticklabels())
+    assert [t.get_text().split("\n")[0] for t in ax.get_xticklabels()] == ["12W", "32W"]
+    faces = [to_hex(patch.get_facecolor()) for patch in ax.patches]
+    assert faces[-1] == green, f"32W was drawn {faces[-1]}, not the color set for it"
+    assert faces[0] != green, "both bars took the override"
+
+    # And the brackets are the ages', not the genotype comparison that is
+    # already on disk -- a bracket over a pair that is not on the axis is
+    # worse than no bracket.
+    comp = CO.compare_genotypes(pooled, ["collagen_to_muscle_ratio"], by="age")
+    assert set(comp["genotype_a"]) == {"12W"} and set(comp["genotype_b"]) == {"32W"}
+    assert float(comp["p"].iloc[0]) < 0.05, "twice the collagen and no p-value"
+
+    # The curve through the wall follows the same choice, and the field it is
+    # grouped on leaves the panel grid: splitting the panels on age *and*
+    # overlaying age would draw one curve per panel and call it a comparison.
+    avg = CO.average_depth_profile(pd.concat(
+        [_curve(f"{g}-{a}", g, a, 0.5, 100, f"{g}{a}")
+         for g in ("WT", "KO") for a in ("12W", "32W")], ignore_index=True))
+    fig = CO.plot_depth_profiles(avg, by="age", spec=CO.PlotSpec(colours={"32W": green}))
+    drawn = {line.get_label().split(" (n=")[0]: to_hex(line.get_color())
+             for ax in fig.axes for line in ax.get_lines() if line.get_label()[:1] != "_"}
+    assert set(drawn) == {"12W", "32W"}, f"the curves are {sorted(drawn)}"
+    assert drawn["32W"] == green, "the color a scheme sets by name missed the curve"
 
 
 if __name__ == "__main__":
