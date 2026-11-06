@@ -58,12 +58,27 @@ import wall_analysis as WA
 import cohort as CO
 import fibrosis as FB
 import sessionfile as SF
+from labkit import board as LKBoard
 from labkit import browse as LKB
 from labkit import schemes as LKSC   # LKS is labkit.stats in cohort.py
 from labkit.plots import PlotSpec
 
 HERE = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=str(HERE / "static"), static_url_path="/static")
+
+
+@app.errorhandler(ValueError)
+def _bad_request(exc):
+    """
+    A ValueError raised in a route is a sentence meant for the person.
+
+    Without this it leaves as a 500 page of HTML and the page can only say
+    "HTTP 500" -- which is how "pick an output folder first" would reach
+    somebody as a crash.
+    """
+    return jsonify({"error": str(exc)}), 400
+
+
 app.config["JSON_SORT_KEYS"] = False
 
 SESSIONS: dict[str, dict[str, Any]] = {}
@@ -229,6 +244,8 @@ app.register_blueprint(LKB.flask_blueprint())
 # "the KO is this red" is a decision about a paper, and a paper's panels come
 # out of more than one of these programs.
 app.register_blueprint(LKSC.flask_blueprint())
+# Send to board with the page open on its own: the figure goes to omnifig from here.
+app.register_blueprint(LKBoard.flask_blueprint("ASFQ"))
 
 
 # =============================================================================
@@ -630,19 +647,24 @@ def session_load_layout(sid: str):
 # which rule the media was measured by, how the figure was styled -- and until
 # now none of it outlived the tab.  See `sessionfile` for what is kept and what
 # is only pointed at.
+#
+# A session is a file wherever the user said to put it: these two routes take a
+# path, and the file dialog is what lists them.
 
 
-@app.route("/api/sessions")
-def sessions_list():
-    return jsonify({"sessions": SF.listing(), "dir": str(SF.SESSION_DIR)})
+@app.route("/api/sessions/where")
+def sessions_where():
+    """Where the open dialog should start, the first time it is opened."""
+    old = SF.old_store()
+    return jsonify({"old_store": str(old) if old else None, "suffix": SF.SUFFIX})
 
 
 @app.route("/api/sessions/save", methods=["POST"])
 def sessions_save():
     body = request.json or {}
-    name = str(body.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "a session needs a name"}), 400
+    path = str(body.get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "say where to save it"}), 400
     sid = body.get("sid")
     stitch = None
     if sid:
@@ -650,19 +672,22 @@ def sessions_save():
             stitch = SF.stitch_state(_sess(sid))
         except KeyError:
             stitch = None      # the tab outlived the server; keep the rest
-    path = SF.save(name, body.get("ui") or {}, stitch)
-    return jsonify({"path": str(path), "name": path.stem,
-                    "renamed": path.stem != name, "bytes": path.stat().st_size})
+    try:
+        written = SF.save(path, body.get("ui") or {}, stitch)
+    except OSError as exc:
+        return jsonify({"error": f"could not write it: {exc}"}), 400
+    return jsonify({"path": str(written), "name": written.name,
+                    "bytes": written.stat().st_size})
 
 
 @app.route("/api/sessions/open", methods=["POST"])
 def sessions_open():
     body = request.json or {}
     try:
-        data = SF.load(str(body.get("name") or ""))
+        data = SF.load(str(body.get("path") or ""))
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         return jsonify({"error": str(exc)}), 400
     st = data.get("stitch") or {}
     folder = st.get("folder")
@@ -674,13 +699,6 @@ def sessions_open():
                         "folder": folder, "ui": data.get("ui") or {}}), 409
     return jsonify({"name": data.get("name"), "saved": data.get("saved"),
                     "stitch": st or None, "ui": data.get("ui") or {}})
-
-
-@app.route("/api/sessions/delete", methods=["POST"])
-def sessions_delete():
-    body = request.json or {}
-    ok = SF.delete(str(body.get("name") or ""))
-    return jsonify({"deleted": bool(ok)})
 
 
 # =============================================================================
@@ -741,6 +759,22 @@ def _outline_for_editor(res: Any, paths: dict[str, Any], max_points: int = 700
     }
 
 
+def _out_dir(body) -> Path:
+    """
+    Where this run writes, as the page says.
+
+    There is no default.  A fallback inside the app's own directory is what
+    `ASFQ/analysis_out` became: real results, kept where nobody looks for them
+    and nothing backs them up.  The page asks for a folder before it posts, so
+    the only way here without one is an older page left open in a tab -- better
+    refused than written somewhere invisible.
+    """
+    raw = str(body.get("out_dir") or "").strip()
+    if not raw:
+        raise ValueError("say where the results go: pick an output folder first")
+    return Path(raw).expanduser()
+
+
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     """
@@ -761,7 +795,7 @@ def analyze():
             except (TypeError, ValueError):
                 setattr(wp, k, v)
     name = str(body.get("name") or "wall")
-    out_dir = Path(str(body.get("out_dir") or (HERE / "analysis_out"))).expanduser()
+    out_dir = _out_dir(body)
     render_scale = float(body.get("render_scale", 0.35))
     island = body.get("island", 0)
     # A hand-drawn outline, in microns from the top-left of the image.  Microns
@@ -904,6 +938,7 @@ def analyze():
             "paths": {k: str(v) for k, v in p_i.items()},
             "rectangular_channels_png": str(p_i["rectangular_channels"]),
             "rectangular_channels_pdf": str(p_i["rectangular_channels_pdf"]),
+            "rectangular_channels_svg": str(p_i["rectangular_channels_svg"]),
             "straight_png": str(p_i["straightened"]),
             "outline": _outline_for_editor(r_i, p_i),
         } for r_i, p_i, rank in out]
@@ -918,6 +953,7 @@ def analyze():
             "rectangular_png": str(paths["rectangular"]),
             "rectangular_channels_png": str(paths["rectangular_channels"]),
             "rectangular_channels_pdf": str(paths["rectangular_channels_pdf"]),
+            "rectangular_channels_svg": str(paths["rectangular_channels_svg"]),
             "vessels": vessels,
             "lumina": _jsonable(getattr(res, "lumina", []) or []),
             "outline": _outline_for_editor(res, paths),
@@ -989,10 +1025,13 @@ def replot():
                                organ=entry.get("organ", ""), **kw)
         fig.savefig(p, dpi=130, bbox_inches="tight")
         plt.close(fig)
-        with plt.rc_context({"pdf.fonttype": 42}):
+        # Both vector formats, under the same names save_results wrote them:
+        # the PDF to download and the SVG omnifig's board takes.
+        with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
             fig = FB.plot_fibrosis(entry["fib"], title=entry.get("title", ""),
                                    organ=entry.get("organ", ""), svg=True, **kw)
             fig.savefig(p.with_suffix(".pdf"), bbox_inches="tight")
+            fig.savefig(p.with_suffix(".svg"), bbox_inches="tight")
             plt.close(fig)
         return jsonify({"ok": True})
 
@@ -1014,8 +1053,9 @@ def replot():
     # See save_results for why the vector pass is a separate render rather
     # than a second savefig of the same figure.
     fig_vec = WA.plot_rectangular(entry["res"], overview_rgb=entry["overview_rgb"], svg=True, **kw)
-    with plt.rc_context({"pdf.fonttype": 42}):
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
         fig_vec.savefig(p.with_suffix(".pdf"), bbox_inches="tight")
+        fig_vec.savefig(p.with_suffix(".svg"), bbox_inches="tight")
     plt.close(fig_vec)
     return jsonify({"ok": True})
 
@@ -1123,7 +1163,7 @@ def cohort_plot():
     the expensive part and it is already done and on disk.
     """
     body = request.json or {}
-    out_dir = Path(str(body.get("out_dir") or (HERE / "batch_out"))).expanduser()
+    out_dir = _out_dir(body)
     organ = str(body.get("organ") or "aorta")
     tables = {}
     for name in COHORT_TABLES:
@@ -1183,6 +1223,9 @@ def cohort_plot():
     # What the figure could be split on and what it just drew, so the panel can
     # offer a color box per group without guessing at names the figure does
     # not carry -- and so a field the table lost falls back the same way here.
+    # The table the grid was drawn from, which is its source data.
+    paths["source_csv"] = str(out_dir / "cohort_{}.csv".format(
+        CO.UNIT_TABLE.get(str(body.get("unit") or "mouse_segment"), "by_mouse_segment")))
     paths.update(CO.group_options(
         tables, str(body.get("unit") or "mouse_segment"), group_by))
     return jsonify(paths)
@@ -1246,7 +1289,7 @@ def fibrosis_one():
     organ = str(body.get("organ") or "heart")
     fp = _fib_params(body.get("params") or {})
     name = str(body.get("name") or organ)
-    out_dir = Path(str(body.get("out_dir") or (HERE / "analysis_out"))).expanduser()
+    out_dir = _out_dir(body)
     # Hand-drawn polygons, in microns from the top-left of the image, so a
     # drawing made on the overview survives a change of render scale or of
     # analysis resolution between the run that drew it and the run that uses
@@ -1286,6 +1329,7 @@ def fibrosis_one():
                 "points": _jsonable(res.points),
                 "paths": {k: str(v) for k, v in paths.items()},
                 "figure_png": paths["figure"], "figure_pdf": paths["figure_pdf"],
+                "figure_svg": paths["figure_svg"],
                 "overview": paths["overview"],
                 "overview_px_um": float(paths["overview_px_um"]),
                 "stains": _jsonable(np.asarray(res.stain_matrix).tolist())}
@@ -1309,7 +1353,7 @@ def zones_suggest():
     """
     body = request.json or {}
     organ = str(body.get("organ") or "kidney")
-    out_dir = Path(str(body.get("out_dir") or (HERE / "analysis_out"))).expanduser()
+    out_dir = _out_dir(body)
     name = str(body.get("name") or organ)
 
     def work(progress):
@@ -1355,7 +1399,7 @@ def fibrosis_batch():
     if parent and not folders:
         folders = [Path(m.folder) for m in
                    CO.scan_tray(parent, list_images=SC.list_images, organ=organ)]
-    out_root = Path(str(body.get("out_dir") or (HERE / "batch_out"))).expanduser()
+    out_root = _out_dir(body)
     sp = _params_from(body.get("stitch_params", {}))
     fp = _fib_params(body.get("params") or {})
     render_scale = float(body.get("render_scale", 0.35))
@@ -1472,7 +1516,7 @@ def batch():
     parent = Path(str(body["parent"])).expanduser() if body.get("parent") else None
     if parent and not folders:
         folders = [Path(m.folder) for m in CO.scan_tray(parent, list_images=SC.list_images)]
-    out_root = Path(str(body.get("out_dir") or (HERE / "batch_out"))).expanduser()
+    out_root = _out_dir(body)
     do_analysis = bool(body.get("analyze", True))
     sp = _params_from(body.get("stitch_params", {}))
     wp = WA.WallParams()
@@ -1620,6 +1664,8 @@ def main() -> None:
     port = int(os.environ.get("PORT") or os.environ.get("FIBROSIS_PORT") or 8765)
     print("\n  Aortic Straightener and Fibrosis Quantifier")
     print(f"  open  http://127.0.0.1:{port}\n")
+    from labkit import lifetime     # stop once the last browser window closes
+    lifetime.flask(app, busy=lambda: any(not j.get("done") for j in list(JOBS.values())))
     app.run(host="127.0.0.1", port=port, threaded=True, debug=False)
 
 

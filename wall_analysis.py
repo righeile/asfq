@@ -3502,11 +3502,15 @@ def save_results(res: WallResult, out_dir: str | Path, name: str = "wall",
     fig.savefig(out_dir / f"{name}_rectangular_channels.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
     fig_vec = plot_rectangular(res, overview_rgb=overview_rgb, svg=True)
-    with plt.rc_context({"pdf.fonttype": 42}):
+    # The SVG beside it is omnifig's -- its board takes vector as SVG, and
+    # this is the same render, so it costs one more write.
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
         fig_vec.savefig(out_dir / f"{name}_rectangular_channels.pdf", bbox_inches="tight")
+        fig_vec.savefig(out_dir / f"{name}_rectangular_channels.svg", bbox_inches="tight")
     plt.close(fig_vec)
     paths["rectangular_channels"] = str(out_dir / f"{name}_rectangular_channels.png")
     paths["rectangular_channels_pdf"] = str(out_dir / f"{name}_rectangular_channels.pdf")
+    paths["rectangular_channels_svg"] = str(out_dir / f"{name}_rectangular_channels.svg")
     _savez_fast(
         out_dir / f"{name}_maps.npz",
         straight_rgb=res.straight_rgb.astype(np.float16),

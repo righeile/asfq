@@ -1735,6 +1735,7 @@ def save_depth_plot(avg: pd.DataFrame, out_dir: str | Path,
     out_dir.mkdir(parents=True, exist_ok=True)
     fig = plot_depth_profiles(avg, **kwargs)
     png, pdf = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.pdf"
+    svg = pdf.with_suffix(".svg")
     fig.savefig(png, dpi=150, bbox_inches="tight")
     # PDF, not SVG: the vector a journal asks for, one file rather than a file
     # plus the reader's fonts.  `pdf.fonttype: 42` embeds the TrueType outlines
@@ -1742,10 +1743,14 @@ def save_depth_plot(avg: pd.DataFrame, out_dir: str | Path,
     # text -- the same promise `svg.fonttype: "none"` made for SVG.  Set here
     # as well as in labkit's global rcParams, so this is still true when the
     # module is driven from a script that never imported labkit.plots.
-    with plt.rc_context({"pdf.fonttype": 42}):
+    # And an SVG beside it, which is the format omnifig's board takes: the
+    # figure is drawn and laid out already, so it costs a write and not a
+    # second render.  "svg.fonttype" is here for the same reason 42 is.
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
         fig.savefig(pdf, bbox_inches="tight")
+        fig.savefig(svg, bbox_inches="tight")
     plt.close(fig)
-    return {"png": str(png), "pdf": str(pdf)}
+    return {"png": str(png), "pdf": str(pdf), "svg": str(svg)}
 
 
 def save_cohort_plot(tables: dict[str, pd.DataFrame], out_dir: str | Path,
@@ -1757,6 +1762,7 @@ def save_cohort_plot(tables: dict[str, pd.DataFrame], out_dir: str | Path,
     out_dir.mkdir(parents=True, exist_ok=True)
     fig = plot_cohort(tables, **kwargs)
     png, pdf = out_dir / f"{name}_plot.png", out_dir / f"{name}_plot.pdf"
+    svg = pdf.with_suffix(".svg")
     fig.savefig(png, dpi=150, bbox_inches="tight")
     # PDF, not SVG: the vector a journal asks for, one file rather than a file
     # plus the reader's fonts.  `pdf.fonttype: 42` embeds the TrueType outlines
@@ -1764,7 +1770,11 @@ def save_cohort_plot(tables: dict[str, pd.DataFrame], out_dir: str | Path,
     # text -- the same promise `svg.fonttype: "none"` made for SVG.  Set here
     # as well as in labkit's global rcParams, so this is still true when the
     # module is driven from a script that never imported labkit.plots.
-    with plt.rc_context({"pdf.fonttype": 42}):
+    # And an SVG beside it, which is the format omnifig's board takes: the
+    # figure is drawn and laid out already, so it costs a write and not a
+    # second render.  "svg.fonttype" is here for the same reason 42 is.
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
         fig.savefig(pdf, bbox_inches="tight")
+        fig.savefig(svg, bbox_inches="tight")
     plt.close(fig)
-    return {"png": str(png), "pdf": str(pdf)}
+    return {"png": str(png), "pdf": str(pdf), "svg": str(svg)}

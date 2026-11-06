@@ -38,14 +38,10 @@
     <div class="group">
       <h3>Session</h3>
       <div class="row">
-        <input id="sess-name" type="text" placeholder="name this session" spellcheck="false">
-        <button id="btn-sess-save" class="ghost small" title="Save the whole working state under this name">Save</button>
+        <button id="btn-sess-save" class="ghost small" title="Save the whole working state to a file you choose">Save as…</button>
+        <button id="btn-sess-open" class="ghost small" title="Clear the tab and restore a session from a file">Open…</button>
       </div>
-      <div class="row">
-        <select id="sess-list"><option value="">no saved sessions</option></select>
-        <button id="btn-sess-open" class="ghost small" title="Clear the tab and restore this session">Open</button>
-        <button id="btn-sess-del" class="ghost small" title="Delete the saved session">Delete</button>
-      </div>
+      <div id="sess-file" class="hint dim"></div>
       <div id="sess-note" class="hint"></div>
       <div class="hint">Keeps what you decided, not just what you exported: where the tiles ended up,
         the redirected trace, the marks, the foci you clicked away, every setting on every tab and how

@@ -17,6 +17,14 @@ analysis into the same folder updates every session that points at it, and a
 session and its outputs cannot drift into disagreeing about the numbers -- the
 only copy of a number is the one in the results folder.
 
+**A session is a file where the user put it.**  There is no store of sessions
+by name under a dot-folder in ``$HOME``: saving asks where, every time, the way
+a document does.  A folder of sessions is then something a person can see in
+Finder, back up, and hand to someone else with the results beside it -- none of
+which is true of ``~/.asfq/sessions``.  The file dialog is the list, so this
+module has no ``listing`` and no ``delete``: the one that used to exist is gone
+and so is the select box it fed.
+
 **The client's own state is stored opaquely.**  Everything under ``ui`` is
 written and read back without the server looking inside it.  The server knows
 about tiles and poses because it holds them; it has no business knowing that
@@ -28,7 +36,6 @@ it knew about.
 from __future__ import annotations
 
 import json
-import re
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -40,42 +47,48 @@ from typing import Any
 APP_ID = "asfq"
 APP_IDS = (APP_ID, "fibrosis-quantifier")
 
-_STORE = Path.home() / ".asfq"
-if not _STORE.exists():                       # sessions saved under the old name
-    try:
-        Path.home().joinpath(".fibrosis_quantifier").rename(_STORE)
-    except OSError:                           # absent, or not ours to move
-        pass
-SESSION_DIR = _STORE / "sessions"
 VERSION = 1
 
+#: What the save dialog puts on a name that has no suffix, and what the open
+#: dialog filters its listing by.  Doubled up deliberately: ``.json`` alone
+#: would offer every layout, every results table and every figure preset in the
+#: same folder as the session to open.
+SUFFIX = ".asfq.json"
 
-def sanitize(name: str) -> str:
+#: Sessions were kept here when the app managed them by name.  Nothing is
+#: written to it any more and nothing is moved out of it; it is only where the
+#: open dialog starts, so a session saved before the change is one click away
+#: instead of lost.
+OLD_STORE = Path.home() / ".asfq" / "sessions"
+
+
+def old_store() -> Path | None:
+    """The retired store, if it still holds anything worth opening."""
+    try:
+        return OLD_STORE if any(OLD_STORE.glob("*.json")) else None
+    except OSError:
+        return None
+
+
+def save(path: str | Path, ui: dict[str, Any],
+         stitch: dict[str, Any] | None = None) -> Path:
     """
-    A session name that is safe as a file name, and honest about being changed.
+    Write one session to the path the user chose.
 
-    A name with a slash in it does not reach a server-side check at all -- the
-    router rejects the path before any handler runs -- so the caller has to be
-    told what the name became rather than discovering a 404.  The client does
-    the same substitution and says so; this is the backstop.
+    The name is theirs, not sanitized into something else: it arrives from the
+    file dialog, where a slash makes a folder rather than a bad file name, and
+    silently renaming a file someone has just named is how a save ends up
+    somewhere they do not look for it.  The suffix is the one thing added, and
+    only when it is missing.
     """
-    clean = re.sub(r"[^\w\-. ]+", "-", str(name or "").strip())
-    clean = re.sub(r"\s+", " ", clean).strip(" .-")
-    return clean[:80] or "session"
-
-
-def _path(name: str) -> Path:
-    return SESSION_DIR / f"{sanitize(name)}.json"
-
-
-def save(name: str, ui: dict[str, Any], stitch: dict[str, Any] | None = None) -> Path:
-    """Write one session.  Returns the path, whose stem is the cleaned name."""
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    path = _path(name)
+    path = Path(path).expanduser()
+    if not path.name.lower().endswith(SUFFIX):
+        path = path.with_name(path.name + SUFFIX)
+    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "app": APP_ID,
         "version": VERSION,
-        "name": path.stem,
+        "name": path.name[: -len(SUFFIX)],
         "saved": time.time(),
         "stitch": stitch or None,
         "ui": ui or {},
@@ -84,55 +97,16 @@ def save(name: str, ui: dict[str, Any], stitch: dict[str, Any] | None = None) ->
     return path
 
 
-def load(name: str) -> dict[str, Any]:
-    path = _path(name)
-    if not path.exists():
-        raise FileNotFoundError(f"no saved session called {path.stem!r}")
+def load(path: str | Path) -> dict[str, Any]:
+    path = Path(str(path)).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} is not there")
     data = json.loads(path.read_text())
     if data.get("app") not in APP_IDS:
         raise ValueError(f"{path.name} is not an ASFQ session")
+    data.setdefault("name", path.name[: -len(SUFFIX)] if path.name.endswith(SUFFIX)
+                    else path.stem)
     return data
-
-
-def delete(name: str) -> bool:
-    path = _path(name)
-    if not path.exists():
-        return False
-    path.unlink()
-    return True
-
-
-def listing() -> list[dict[str, Any]]:
-    """
-    Every saved session, newest first, with enough to choose between them.
-
-    The source folder is reported as it was recorded *and* as it stands now: a
-    folder that has been moved or renamed is the one failure this feature has,
-    and it is worth seeing before opening rather than as an error afterwards.
-    """
-    if not SESSION_DIR.exists():
-        return []
-    out: list[dict[str, Any]] = []
-    for p in sorted(SESSION_DIR.glob("*.json")):
-        try:
-            d = json.loads(p.read_text())
-            if d.get("app") not in APP_IDS:
-                continue
-            folder = ((d.get("stitch") or {}).get("folder")) or None
-            ui = d.get("ui") or {}
-            out.append({
-                "name": p.stem,
-                "saved": d.get("saved"),
-                "folder": folder,
-                "folder_exists": bool(folder and Path(folder).exists()),
-                "n_tiles": len((d.get("stitch") or {}).get("poses") or []),
-                "tab": ui.get("tab"),
-                "bytes": p.stat().st_size,
-            })
-        except Exception:
-            continue          # a file we cannot read is not a session
-    out.sort(key=lambda r: r.get("saved") or 0, reverse=True)
-    return out
 
 
 def stitch_state(sess: dict[str, Any]) -> dict[str, Any]:

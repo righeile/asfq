@@ -27,6 +27,16 @@ const api = async (url, body) => {
   return j;
 };
 
+/* What omnifig's board is handed when ASFQ is open in one of its tabs: the
+   SVG the save just wrote beside the PDF, fetched only when the button is
+   pressed.  A file that is not there sends nothing rather than an error --
+   a batch run before this existed has the PDF and not the SVG.  *url* may be
+   a function, for the one button that outlives the figure it sends. */
+const boardSvg = (url) => () => fetch(typeof url === 'function' ? url() : url)
+  .then((r) => (r.ok ? r.text() : null));
+// The tables a result wrote, which go to the board with its figure as its source data.
+const csvs = (paths) => Object.values(paths || {}).filter((p) => /\.csv$/i.test(p));
+
 const S = {
   sid: null, tiles: [], poses: [], thumbs: [], qc: null, stats: {},
   sel: new Set(), view: { ox: 0, oy: 0, z: 0.05 },
@@ -386,13 +396,27 @@ async function pushPoses(withQC) {
   return api(`/api/session/${S.sid}/poses`, { poses: payload, qc: !!withQC });
 }
 
+/* The folder the results go into.  Asked for rather than assumed: runs used
+   to fall back to a folder inside the app itself, which is a day's work kept
+   where nobody would look for it and nothing backs it up.  The answer stays in
+   the box beside the button, so it is visible and can be changed. */
+async function outFolder(el, title) {
+  const have = (el.value || '').trim();
+  if (have) return have;
+  const dir = await LK.browse({ mode: 'dir', title: title || 'Where the results go' });
+  if (dir) el.value = dir;
+  return dir || '';
+}
+
 /* ------------------------------------------------------------ export etc */
 $('#btn-export').onclick = async () => {
   try {
+    const out = await outFolder($('#e-dir'), 'Where the mosaic goes');
+    if (!out) return;
     await pushPoses();
     const { job } = await api(`/api/session/${S.sid}/export`, {
       scale: +$('#e-scale').value, island: $('#e-island').value,
-      mode: $('#e-mode').value, out_dir: $('#e-dir').value.trim() || null,
+      mode: $('#e-mode').value, out_dir: out,
     });
     const r = await runJob(job, $('#progress'), 'exporting');
     $('#export-out').innerHTML =
@@ -427,15 +451,7 @@ $('#btn-lock').onclick = () => { toggleLock(); };
 $('#btn-fit').onclick = () => { fitView(); draw(); };
 
 $('#btn-sess-save').onclick = () => saveSession();
-$('#btn-sess-open').onclick = () => openSession($('#sess-list').value);
-$('#btn-sess-del').onclick = async () => {
-  const name = $('#sess-list').value;
-  if (!name) return sessionNote('pick a session first', true);
-  await api('/api/sessions/delete', { name });
-  sessionNote(`deleted "${name}"`);
-  await refreshSessions();
-};
-refreshSessions();
+$('#btn-sess-open').onclick = () => openSession();
 
 $('#p-ghost').oninput = () => {
   S.ghost = Math.max(0.05, Math.min(1, (+$('#p-ghost').value || 100) / 100));
@@ -1093,9 +1109,11 @@ async function runAnalysis(extra) {
   const useSession = $('#wsrc-sess').checked;
   if (useSession && !S.sid) return alert('Load and stitch a folder first, or choose an image file.');
   const params = wallParams();
+  const out = await outFolder($('#w-out'));
+  if (!out) return;
   const body = {
     params, name: $('#w-name').value.trim() || 'wall',
-    out_dir: $('#w-out').value.trim() || null,
+    out_dir: out,
     points: OUT.points.filter(pt => isFinite(pt[0]) && isFinite(pt[1])),
     lesion_k_mad: +$('#w-lesion-k').value || 3,
     lesion_min_area_um2: +$('#w-lesion-min').value || 2000,
@@ -1220,52 +1238,73 @@ function sessionNote(msg, bad) {
   if (el) { el.textContent = msg || ''; el.classList.toggle('bad', !!bad); }
 }
 
-async function refreshSessions() {
-  const sel = $('#sess-list');
-  if (!sel) return;
-  try {
-    const r = await api('/api/sessions');
-    const keep = sel.value;
-    sel.innerHTML = (r.sessions || []).map((s) => {
-      const when = s.saved ? new Date(s.saved * 1000).toLocaleString() : '';
-      const gone = s.folder && !s.folder_exists ? ' — images moved' : '';
-      return `<option value="${s.name}">${s.name} · ${when}${gone}</option>`;
-    }).join('') || '<option value="">no saved sessions</option>';
-    if (keep) sel.value = keep;
-  } catch (e) { sessionNote(e.message, true); }
+/* Where the dialogs open.  Sessions used to be kept by name in ~/.asfq, and a
+   person who saved one then should find it offered rather than have to
+   remember the dot-folder; after that the dialog's own last folder is the
+   better guess.  Nothing is written there any more. */
+let SESS_WHERE = { old_store: null, suffix: '.asfq.json' };
+let SESS_PATH = '';
+api('/api/sessions/where').then((r) => { SESS_WHERE = r; }).catch(() => {});
+
+function sessStart() {
+  if (SESS_PATH) return SESS_PATH.replace(/\/[^/]*$/, '');
+  // Open starts in the old hidden store while it still holds sessions, so the
+  // sessions saved before this change are one click away.  Save passes the same
+  // folder but with `avoid`, which keeps it out of the old store either way.
+  return SESS_WHERE.old_store || '';
+}
+
+function sessShow(path) {
+  SESS_PATH = path || '';
+  const el = $('#sess-file');
+  if (!el) return;
+  // The name is what identifies it at a glance; the folder is a long line of
+  // nothing in a 220px panel, so it goes in the tooltip.
+  el.textContent = SESS_PATH ? SESS_PATH.split('/').pop() : '';
+  el.title = SESS_PATH;
 }
 
 async function saveSession() {
-  const raw = ($('#sess-name').value || '').trim();
-  if (!raw) return sessionNote('give the session a name first', true);
-  // Cleaned here as well as on the server: a name with a slash in it is
-  // rejected by the router before any handler runs, so the server's own
-  // tidying would never get the chance.
-  const clean = raw.replace(/[^\w\-. ]+/g, '-').replace(/\s+/g, ' ').replace(/^[ .-]+|[ .-]+$/g, '').slice(0, 80);
-  if (!clean) return sessionNote('that name has nothing usable in it', true);
+  const suffix = SESS_WHERE.suffix || '.asfq.json';
+  const path = await LK.save({
+    ext: suffix, exts: [suffix], path: sessStart(),
+    avoid: SESS_WHERE.old_store || '',
+    name: SESS_PATH ? SESS_PATH.split('/').pop() : '',
+    title: 'Save this session', hint: 'Give the session a file name',
+  });
+  if (!path) return;                       // canceled; nothing said, nothing written
   try {
     // The poses are read back off the server, and the canvas is what the
     // person has been dragging: send them up first, as the layout export
     // already does, or a session can be saved a drag behind what is on screen.
     if (S.sid) await pushPoses();
-    const r = await api('/api/sessions/save', { name: clean, sid: S.sid || null, ui: collectSession() });
-    $('#sess-name').value = r.name;
-    sessionNote(`saved "${r.name}"${r.name !== raw ? ` (renamed from "${raw}")` : ''}`
-                + ` · ${(r.bytes / 1024).toFixed(0)} kB`
+    const r = await api('/api/sessions/save', { path, sid: S.sid || null, ui: collectSession() });
+    sessShow(r.path);
+    sessionNote(`saved ${r.name} · ${(r.bytes / 1024).toFixed(0)} kB`
                 + (S.sid ? '' : ' · no tiles loaded, so only the settings'));
-    await refreshSessions();
   } catch (e) { sessionNote(e.message, true); }
 }
 
-async function openSession(name) {
-  if (!name) return sessionNote('pick a session first', true);
+async function openSession() {
+  const suffix = SESS_WHERE.suffix || '.asfq.json';
+  // Plain .json as well as our own suffix: a session saved before the change
+  // is named `<name>.json`, and filtering it out of its own dialog would look
+  // like the work had been thrown away.  One that is not a session is refused
+  // by the server rather than half-applied.
+  const path = await LK.browse({
+    mode: 'file', exts: [suffix, '.json'], path: sessStart(), title: 'Open a session',
+    hint: 'Pick a saved session',
+  });
+  if (!path) return;
+  const name = path.split('/').pop();
   let data;
   try {
-    data = await api('/api/sessions/open', { name });
+    data = await api('/api/sessions/open', { path });
   } catch (e) {
     return sessionNote(e.message, true);   // nothing cleared: the tab still holds what it had
   }
   clearSessionView();
+  sessShow(path);
   const st = data.stitch;
   try {
     if (st && st.folder) {
@@ -1872,15 +1911,23 @@ function showWallResult(r, guided, rank) {
   const bust = '&t=' + Date.now();
   const img = (p) => `<img src="/api/file?path=${encodeURIComponent(p)}${bust}">`;
   const pdf = `/api/file?path=${encodeURIComponent(r.rectangular_channels_pdf)}`;
+  const boardable = `/api/file?path=${encodeURIComponent(r.rectangular_channels_svg || '')}`;
   $('#w-summary').innerHTML =
     `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
        <b>Full analysis figure</b>
-       <a class="btn ghost" href="${pdf}" download>Download PDF</a></div>` +
+       <a id="w-pdf" class="btn ghost" href="${pdf}" download>Download PDF</a></div>` +
     `<div class="hint" style="margin-bottom:8px">The map, every profile plot -- thickness,
       collagen per length, collagen ÷ muscle running along the wall -- and the regression
       against thickness, all from the same trace the numbers above were computed from. Use
       the figure style controls above to rotate, resize or restyle it.</div>` +
     img(r.rectangular_channels_png) + WALL_TABLES;
+  // In omnifig's tab, the same figure onto the board as live vector.  The
+  // block above is rewritten on every run, so the button goes with it and
+  // cannot stack.  Linked by the SVG's path: a run that rewrites the file
+  // redraws the board's copy.
+  if (r.rectangular_channels_svg) {
+    LK.board($('#w-pdf'), boardSvg(boardable), { app: 'ASFQ', key: r.rectangular_channels_svg, source: csvs(r.paths) }).changed();
+  }
   // Outlines are in microns of the analysis frame, the same units the editor
   // draws in, so they need no conversion -- which is the reason they are sent
   // that way rather than as pixels of whichever image produced them.
@@ -2236,9 +2283,11 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
   q('run').onclick = async () => {
     const folders = q('folders').value.split('\n').map(s => s.trim()).filter(Boolean);
     if (!folders.length) return alert('Scan a tray, or list at least one folder.');
+    const out = await outFolder(q('out'));
+    if (!out) return;
     const body = {
       organ, folders, parent: q('parent').value.trim() || null,
-      out_dir: q('out').value.trim() || null,
+      out_dir: out,
       analyze: q('analyze').checked, render_scale: +q('render').value,
       stitch_params: stitchParams(),
     };
@@ -2295,8 +2344,10 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
     if (!readouts.length) { if (!quiet) alert('Tick at least one readout.'); return; }
     try {
       const num = (k) => (q(k).value.trim() === '' ? null : +q(k).value);
+      const out = await outFolder(q('out'));
+      if (!out) return;
       const r = await api('/api/cohort/plot', {
-        organ, readouts, out_dir: q('out').value.trim() || null,
+        organ, readouts, out_dir: out,
         unit: q('unit').value, group_by: q('groupby').value,
         spec: B.panel.spec(), ncol: num('ncol'),
         stains_together: !!(q('stains') && q('stains').checked),
@@ -2310,13 +2361,20 @@ genotypes."><span><input id="${p}-stains" type="checkbox"> both stains in one pa
         // wall analysis.
         (r.depth_png ? `<h3 class="sec">Through the wall</h3>` +
           `<img src="${file(r.depth_png)}&t=${Date.now()}">` +
-          `<div class="hint"><a href="${file(r.depth_pdf)}" download>this one as PDF</a>` +
+          `<div class="hint"><a id="${p}-depthpdf" href="${file(r.depth_pdf)}" download>this one as PDF</a>` +
           (r.depth_source_csv ? ` · <a href="${file(r.depth_source_csv)}" download>source data
              (CSV)</a> — one row per depth per condition, mean, SD between animals, and n` : '') +
           `</div>` : '');
       const a = q('pdf');
       a.href = `/api/file?path=${encodeURIComponent(r.pdf)}`;
       a.classList.remove('hidden');
+      // The depth figure's block is rewritten every draw, so its button goes
+      // with it; this anchor is part of the panel and outlives the figure, so
+      // its button is made once and reads whichever figure was drawn last.
+      if (r.depth_svg) LK.board(q('depthpdf'), boardSvg(file(r.depth_svg)), { app: 'ASFQ', key: r.depth_svg, source: r.depth_source_csv }).changed();
+      B.svg = r.svg; B.source = r.source_csv;
+      B.board = B.board || LK.board(a, boardSvg(() => file(B.svg)), { app: 'ASFQ', key: () => B.svg, source: () => B.source });
+      B.board.changed();
       // A color box per group, named by the figure rather than guessed at
       // here -- the server says what it could split on and what it just drew,
       // so a field this batch does not carry cannot end up in the box.
@@ -2968,7 +3026,9 @@ function makeOrganPane(organ, panelHost, stageHost) {
         if (R.guideImg) { R.img = R.guideImg; return drawRegions(); }
         rnote('measuring texture…');
         try {
-          const r = await runJob((await api('/api/zones', zoneBody())).job,
+          const body = await zoneBody();
+          if (!body) return;
+          const r = await runJob((await api('/api/zones', body)).job,
                                  q('progress'), 'texture');
           await loadGuide(r.guide);
           rnote('red looks papillary, blue cortical — no boundary is claimed here');
@@ -2977,7 +3037,9 @@ function makeOrganPane(organ, panelHost, stageHost) {
       q('rsuggest').onclick = async () => {
         rnote('proposing…');
         try {
-          const r = await runJob((await api('/api/zones', zoneBody())).job,
+          const body = await zoneBody();
+          if (!body) return;
+          const r = await runJob((await api('/api/zones', body)).job,
                                  q('progress'), 'zones');
           if (!r.polygons.length) return rnote(r.note || 'nothing proposed');
           // Proposed boundaries go in as anchors, not as fixed outlines: the
@@ -2991,10 +3053,11 @@ function makeOrganPane(organ, panelHost, stageHost) {
         } catch (e) { rnote(e.message); }
       };
     }
-    function zoneBody() {
+    async function zoneBody() {
       const useSession = q('src-sess').checked;
-      const b = { organ, out_dir: q('out').value.trim() || null,
+      const b = { organ, out_dir: await outFolder(q('out')),
                   name: q('name').value.trim() || organ };
+      if (!b.out_dir) return null;
       if (useSession) { b.sid = S.sid; b.island = q('island').value; b.render_scale = +q('render').value; }
       else { b.image = q('file').value.trim(); if (q('px').value.trim() !== '') b.px_um = +q('px').value; }
       return b;
@@ -3099,10 +3162,12 @@ function makeOrganPane(organ, panelHost, stageHost) {
     if (!q('out').value.trim() && src) {
       q('out').value = src.replace(/\/+$/, '').replace(/\/[^/]*$/, '') + '/analysis';
     }
+    const out = await outFolder(q('out'));
+    if (!out) return;
     const body = {
       organ, params: organParams(organ),
       name: q('name').value.trim() || organ,
-      out_dir: q('out').value.trim() || null,
+      out_dir: out,
       points: R.points.filter(pt => isFinite(pt[0]) && isFinite(pt[1])),
       lesion_k_mad: +q('lesion-k').value || 3,
       lesion_min_area_um2: +q('lesion-min').value || 2000,
@@ -3229,6 +3294,13 @@ function showOrganResult(organ, q, r) {
       the background level that was subtracted — it is measured on blank slide, so how
       much of the answer rests on that correction stays visible.
       <a href="/api/file?path=${encodeURIComponent(r.figure_pdf)}" download>Download PDF</a></div>`;
+  // Rebuilt on every result, so the board button is rebuilt with it.  One
+  // download link in that block, which is the one the board follows.
+  if (r.figure_svg) {
+    LK.board(q('summary').querySelector('a[download]'),
+             boardSvg(`/api/file?path=${encodeURIComponent(r.figure_svg)}`),
+             { app: 'ASFQ', key: r.figure_svg, source: csvs(r.paths) }).changed();
+  }
 }
 
 /* Build the panes.  The aorta tab keeps its hand-written wall controls and

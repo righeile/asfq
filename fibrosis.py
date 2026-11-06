@@ -732,11 +732,17 @@ def save_results(res: FibrosisResult, out_dir: str | Path, name: str = "fibrosis
     # embeds the outlines rather than tracing each glyph as a curve, so the
     # labels stay editable text.  `svg=True` still names the flag: it means
     # "drawn for a vector backend", and PDF is one.
-    with plt.rc_context({"pdf.fonttype": 42}):
+    # The SVG beside it is omnifig's: its board takes vector as SVG, and this
+    # is the same render, so it costs one more write.  "svg.fonttype" is read
+    # at save time like 42 is, so it has to be in force here and not merely
+    # where the figure was drawn.
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}):
         fig = plot_fibrosis(res, title=title, organ=organ, svg=True, **style)
         fig.savefig(out_dir / f"{name}_figure.pdf", bbox_inches="tight")
+        fig.savefig(out_dir / f"{name}_figure.svg", bbox_inches="tight")
         plt.close(fig)
     paths["figure_pdf"] = str(out_dir / f"{name}_figure.pdf")
+    paths["figure_svg"] = str(out_dir / f"{name}_figure.svg")
 
     # A picture to draw regions on, not a second copy of the data: the working
     # image can be eight thousand pixels across and the editor shows it in a
