@@ -452,6 +452,8 @@ $('#btn-fit').onclick = () => { fitView(); draw(); };
 
 $('#btn-sess-save').onclick = () => saveSession();
 $('#btn-sess-open').onclick = () => openSession();
+// A session file double-clicked in the Finder, handed on by omnifig (open_file.py).
+if (LK.board.onOpen) LK.board.onOpen((open) => open && open.path && openSession(open.path));
 
 $('#p-ghost').oninput = () => {
   S.ghost = Math.max(0.05, Math.min(1, (+$('#p-ghost').value || 100) / 100));
@@ -1285,13 +1287,13 @@ async function saveSession() {
   } catch (e) { sessionNote(e.message, true); }
 }
 
-async function openSession() {
+async function openSession(given) {
   const suffix = SESS_WHERE.suffix || '.asfq.json';
   // Plain .json as well as our own suffix: a session saved before the change
   // is named `<name>.json`, and filtering it out of its own dialog would look
   // like the work had been thrown away.  One that is not a session is refused
   // by the server rather than half-applied.
-  const path = await LK.browse({
+  const path = given || await LK.browse({
     mode: 'file', exts: [suffix, '.json'], path: sessStart(), title: 'Open a session',
     hint: 'Pick a saved session',
   });

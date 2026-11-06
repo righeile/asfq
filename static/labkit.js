@@ -2081,7 +2081,14 @@
     boardAsked = ev.data;
     boardOpened();
   });
-  LK.board.onOpen = (fn) => { boardOpen = fn; boardOpened(); };
+  // A session file double-clicked in the Finder (omnifig's open_file.py):
+  // ?open=<path> in the address of a page on its own, handed on the same way.
+  const askedPath = global.parent === global && new URLSearchParams(global.location.search).get('open');
+  if (askedPath) {
+    boardAsked = { open: { path: askedPath } };
+    global.history.replaceState(null, '', global.location.pathname + global.location.hash);
+  }
+  LK.board.onOpen = (fn) => { boardOpen = fn; setTimeout(boardOpened); };   // once the app's own script has run
 
   global.LK = LK;
 }(window));
